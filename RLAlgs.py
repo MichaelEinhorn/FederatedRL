@@ -19,6 +19,8 @@ def score(initState=None, iterN=100, env=None, model=None, epLimit=-1):
             act = model.policy(state)
             state, r, term, info = env.step(act)
             reward += r
+        if epLimit != -1 and i >= epLimit:
+            print("testing episode " + str(e) + " timed out with r " + str(reward))
         rewards[e] = reward
     return np.mean(rewards), rewards
 
@@ -28,6 +30,7 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
     sims = 0
     backups = 0
     rewards = np.zeros(iterN)
+    rewardsAvg = []
 
     for e in range(iterN):
 
@@ -62,11 +65,16 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
         # converges if average reward of convN episodes is the same as the previous convN episodes
             if reward > 0 and e >= 2 * convN:
                 avg = np.mean(rewards[e-convN+1:e+1])
+                rewardsAvg.append(avg)
                 prev = np.mean(rewards[e-2*convN:e-convN])
                 diff = abs(avg - prev)
                 if diff < convThresh and avg > 0:
                     print("reward difference " + str(diff))
-                    return model, sims, backups, e, avg, rewards[:e+1]
+                    return model, sims, backups, e, avg, rewards[:e+1], np.array(rewardsAvg)
+
+    avg = np.mean(rewards[e - convN + 1:])
+    rewardsAvg.append(avg)
+    return model, sims, backups, e, avg, rewards, np.array(rewardsAvg)
 
 
 class QTabular:
