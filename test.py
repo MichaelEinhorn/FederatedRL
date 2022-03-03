@@ -17,7 +17,7 @@ def taxiTest():
     print("episodes " + str(episodes))
     print("avg train reward " + str(avgR))
 
-    score, sList = RLAlgs.score(model=model, env=env, epLimit=1000)
+    score, sList = RLAlgs.score(model=model, env=env, epLimit=1000, printErr=True)
     print("avg reward " + str(score))
 
     plt.plot(range(rewardsAvg.shape[0]), rewardsAvg)

@@ -3,7 +3,7 @@ import random
 import gym
 
 
-def score(initState=None, iterN=100, env=None, model=None, epLimit=-1):
+def score(initState=None, iterN=100, env=None, model=None, epLimit=-1, printErr=False):
     rewards = np.zeros(iterN)
     for e in range(iterN):
         if initState is None:
@@ -19,7 +19,7 @@ def score(initState=None, iterN=100, env=None, model=None, epLimit=-1):
             act = model.policy(state)
             state, r, term, info = env.step(act)
             reward += r
-        if epLimit != -1 and i >= epLimit:
+        if epLimit != -1 and i >= epLimit and printErr:
             print("testing episode " + str(e) + " timed out with r " + str(reward))
         rewards[e] = reward
     return np.mean(rewards), rewards
@@ -31,6 +31,7 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
     backups = 0
     rewards = np.zeros(iterN)
     rewardsAvg = []
+    avg = -1000
 
     for e in range(iterN):
 
@@ -61,12 +62,20 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
 
         rewards[e] = reward
         if e % convN == 0:
-            print("episode " + str(e) + " r " + str(reward))
-        # converges if average reward of convN episodes is the same as the previous convN episodes
-            if reward > 0 and e >= 2 * convN:
+
+            # if True:
+            #     # tests without exploration or updating during the episode
+            #     prev = avg
+            #     avg, _ = score(iterN=20, model=model, env=env, epLimit=1000)
+            #     print("episode " + str(e) + " r " + str(avg))
+
+            if e >= 2 * convN:
+                # converges if average reward of convN episodes is the same as the previous convN episodes
                 avg = np.mean(rewards[e-convN+1:e+1])
-                rewardsAvg.append(avg)
+                print("episode " + str(e) + " r " + str(avg))
                 prev = np.mean(rewards[e-2*convN:e-convN])
+
+                rewardsAvg.append(avg)
                 diff = abs(avg - prev)
                 if diff < convThresh and avg > 0:
                     print("reward difference " + str(diff))
