@@ -45,6 +45,10 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
         i = -1
         reward = 0
         while not term and (epLimit == -1 or i < epLimit):
+            # sList = []
+            # for sI in env.decode(state):
+            #     sList.append(sI)
+            # print(np.array(sList))
             i += 1
             if random.uniform(0, 1) < eps:
                 act = env.action_space.sample()
@@ -61,7 +65,9 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
             state = nextS
 
         rewards[e] = reward
-        if e % convN == 0:
+
+        # convergence testing
+        if convN != -1 and e % convN == 0:
 
             # if True:
             #     # tests without exploration or updating during the episode
@@ -71,7 +77,7 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
 
             if e >= 2 * convN:
                 # converges if average reward of convN episodes is the same as the previous convN episodes
-                avg = np.mean(rewards[e-convN+1:e+1])
+                avg = np.mean(rewards[e-convN:e+1])
                 print("episode " + str(e) + " r " + str(avg))
                 prev = np.mean(rewards[e-2*convN:e-convN])
 
@@ -96,9 +102,33 @@ class QTabular:
     def policy(self, state):
         return np.argmax(self.q_tab[state])
 
-    # returns param change size
     def backup(self, state, act, nextS, r, a=0.1, y=0.6):
         q = self.q_tab[state, act]
         qmax = np.max(self.q_tab[nextS])
         nq = (1 - a) * q + a * (r + y * qmax)
         self.q_tab[state, act] = nq
+
+
+def cartPoleFeature(state, action, NF, NA):
+    out = state * (action * 2 - 1)
+    return out
+
+
+class QLinAprox:
+    def __init__(self, env, featureEx):
+        ex = env.observation_space.high
+
+        self.NF = ex.shape[0]
+        self.NA = env.action_space.n
+        self.feat = featureEx
+
+        self.w = np.zeros([self.NA, self.NF])
+
+    def policy(self, state):
+        qV = np.zeros(self.NA)
+        for act in range(self.NA):
+            qV = np.sum(self.feat(state, act, self.NF, self.NA) * self.w[act])
+        return np.argmax(qV)
+
+    def backup(self, state, act, nextS, r, a=0.1, y=0.6):
+        self.w[act] = self.w[act] + a * r * self.feat(state, act, self.NF, self.NA)
