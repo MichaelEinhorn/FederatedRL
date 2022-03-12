@@ -10,7 +10,7 @@ import RLAlgs
 def taxiTest():
     env = gym.make("Taxi-v3").env
     print('NS:' + str(env.observation_space.n) + ' NA:' + str(env.action_space.n))
-    model = RLAlgs.QTabular(env)
+    model = RLAlgs.QTabular(env, stochasticPolicy=False)
     model, sims, backups, episodes, avgR, rList, rewardsAvg = RLAlgs.QLearning(env=env, model=model, eps=0.1,
                                                             a=0.1, y=0.6, convN=100, convThresh=0.01)
     print("simulation steps " + str(sims))
@@ -26,8 +26,9 @@ def taxiTest():
 
 def cartTest():
     env = gym.make("CartPole-v1").env
-    model = RLAlgs.QLinAprox(env, RLAlgs.cartPoleFeature)
-    model, sims, backups, episodes, avgR, rList, rewardsAvg = RLAlgs.QLearning(env=env, model=model, iterN=1000, eps=0.1,
+    model = RLAlgs.QLinAprox(env, RLAlgs.cartPoleFeature, stochasticPolicy=True)
+    # model = RLAlgs.RandomPolicy(env)
+    model, sims, backups, episodes, avgR, rList, rewardsAvg = RLAlgs.QLearning(env=env, model=model, iterN=1000, eps=0,
                                                                                a=0.01, y=0.6, convN=-1, convThresh=0.01)
 
     print("train rewards")

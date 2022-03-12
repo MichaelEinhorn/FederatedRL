@@ -30,7 +30,7 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
     sims = 0
     backups = 0
     rewards = np.zeros(iterN)
-    rewardsAvg = []
+    rewardsAvg = [0]
     avg = -1000
 
     for e in range(iterN):
@@ -85,22 +85,31 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
                 diff = abs(avg - prev)
                 if diff < convThresh and avg > 0:
                     print("reward difference " + str(diff))
-                    return model, sims, backups, e, avg, rewards[:e+1], np.array(rewardsAvg)
-
-    avg = np.mean(rewards[e - convN + 1:])
+                    if eps != 0:
+                        print("training no eps")
+                        eps = 0
+                    else:
+                        return model, sims, backups, e, avg, rewards[:e+1], np.array(rewardsAvg)
+    if convN != -1:
+        avg = np.mean(rewards[e - convN + 1:])
     rewardsAvg.append(avg)
     return model, sims, backups, e, avg, rewards, np.array(rewardsAvg)
 
 
 class QTabular:
-    def __init__(self, env):
+    def __init__(self, env, stochasticPolicy=False):
         self.NS = env.observation_space.n
         self.NA = env.action_space.n
         self.q_tab = np.zeros([self.NS, self.NA])
         self.q_tab_old = np.zeros([self.NS, self.NA])
+        self.stoch = stochasticPolicy
 
     def policy(self, state):
-        return np.argmax(self.q_tab[state])
+        if self.stoch:
+            qV = softmax(self.q_tab[state])
+            return np.random.choice(range(self.NA), 1, p=qV)[0]
+        else:
+            return np.argmax(self.q_tab[state])
 
     def backup(self, state, act, nextS, r, a=0.1, y=0.6):
         q = self.q_tab[state, act]
@@ -115,20 +124,43 @@ def cartPoleFeature(state, action, NF, NA):
 
 
 class QLinAprox:
-    def __init__(self, env, featureEx):
+    def __init__(self, env, featureEx, stochasticPolicy=False):
         ex = env.observation_space.high
 
         self.NF = ex.shape[0]
         self.NA = env.action_space.n
         self.feat = featureEx
+        self.stoch = stochasticPolicy
 
         self.w = np.zeros([self.NA, self.NF])
 
     def policy(self, state):
         qV = np.zeros(self.NA)
         for act in range(self.NA):
-            qV = np.sum(self.feat(state, act, self.NF, self.NA) * self.w[act])
-        return np.argmax(qV)
+            qV[act] = np.sum(self.feat(state, act, self.NF, self.NA) * self.w[act])
+        if self.stoch:
+            qV = softmax(qV)
+            return np.random.choice(range(self.NA), 1, p=qV)[0]
+        else:
+            return np.argmax(qV)
 
     def backup(self, state, act, nextS, r, a=0.1, y=0.6):
         self.w[act] = self.w[act] + a * r * self.feat(state, act, self.NF, self.NA)
+
+
+class RandomPolicy:
+    def __init__(self, env):
+        self.space = env.action_space
+        self.w = None
+
+    def policy(self, state):
+        return self.space.sample()
+
+    def backup(self, state, act, nextS, r, a=0.1, y=0.6):
+        return
+
+
+def softmax(x):
+    x = np.exp(x - np.max(x))
+    return x / np.sum(x)
+
