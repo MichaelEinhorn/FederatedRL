@@ -1,5 +1,6 @@
 import numpy as np
 import random
+import time
 
 
 def softmax(x, axis=-1):
@@ -8,6 +9,7 @@ def softmax(x, axis=-1):
         return x / np.sum(x)
     x = np.exp(x - np.max(x, axis=axis, keepdims=True))
     return x / np.sum(x, axis=axis, keepdims=True)
+
 
 def getArgs(*args, **kwargs):
     all_args = {("arg" + str(idx + 1)): arg for idx, arg in enumerate(args)}

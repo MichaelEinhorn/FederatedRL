@@ -92,8 +92,10 @@ class QTabularFedAvg():
             self.rng = default_rng(seed)
 
         self.runAgg = False
+        self.done = False
 
     def start(self, QLearnF=None, QLearningKWArgs=None):
+        self.done = False
         parr = [None] * self.P
         mpEnd = mp.Value(ctypes.c_bool, False)
         kwargs = QLearningKWArgs
@@ -107,11 +109,16 @@ class QTabularFedAvg():
         aggT.start()
 
         out = [self.returnQ.get()]
+        print(out)
+        # terminates aggregate
         self.Queue.put(None)
-        mpEnd.value = False
+        mpEnd.value = True
+
         for i in range(1, self.P):
             out.append(self.returnQ.get())
+            print(out[i])
 
+        self.done = True
 
         return out, self.aggs
 
@@ -122,9 +129,11 @@ class QTabularFedAvg():
             for i in range(self.P):
                 arr.append(self.Queue.get())
                 if arr[i] is None:
-                    return
+                    break
+            if arr[i] is None:
+                break
             # locked
-            # print("aggregating")
+            print("aggregating")
             self.aggs += 1
             self.q_tab = np.zeros(self.shape)
             for model in arr:
@@ -136,6 +145,15 @@ class QTabularFedAvg():
                 self.Queue.task_done()
             if not loop:
                 break
+
+        # prevents process hanging on join
+        while not self.done:
+            try:
+                temp = self.Queue.get(timeout=1)
+                self.Queue.task_done()
+            except:
+                temp = None
+
 
 
 

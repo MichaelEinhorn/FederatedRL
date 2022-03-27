@@ -42,7 +42,8 @@ def mdpTest():
     print("avg reward " + str(score))
 
     plt.plot(range(diffs.shape[0]), diffs)
-    plt.gca().set(ylim=(0, 1))
+    #plt.gca().set(ylim=(0, 1))
+    plt.yscale('log')
     plt.savefig("trainingMDP.png")
 
 
@@ -59,7 +60,7 @@ def mdpTestFed():
 
     kwArgs = utils.getArgs(env=env, model=model, eps=1, epLimit=100,
                            a=0.1, y=0.6, convN=100, convThresh=0.01, convMethod="compare", otherModel=modelBell, logging=True,
-                           syncB=-1, syncE=200)
+                           syncB=-1, syncE=100)
     print(kwArgs)
 
     federatedModel = RLModels.QTabularFedAvg(model.getW().shape, stochasticPolicy=True, p=10)
@@ -81,7 +82,8 @@ def mdpTestFed():
     print("avg reward " + str(score))
 
     plt.plot(range(diffs.shape[0]), diffs)
-    plt.gca().set(ylim=(0, 1))
+    # plt.gca().set(ylim=(0, 1))
+    plt.yscale('log')
     plt.savefig("trainingMDPFed.png")
 
 
@@ -144,3 +146,4 @@ def cartTest():
 
 if __name__ == '__main__':
     mdpTest()
+    mdpTestFed()
