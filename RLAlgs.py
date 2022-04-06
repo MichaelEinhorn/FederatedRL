@@ -1,5 +1,4 @@
 import numpy as np
-import random
 import gym
 import copy
 from numpy.random import default_rng
@@ -67,7 +66,7 @@ def TDLearnNStep(env=None, n=1, a=0.1, y=0.6, lam=0.9, eps=0.1, iterN=100000, ep
             sims += 1
             nextS, r, term, info = env.step(act)
 
-            if random.uniform(0, 1) < eps:
+            if rng.random() < eps:
                 actP = env.action_space.sample()
             else:
                 if stoch:
@@ -127,32 +126,42 @@ def QLearningTabularBellman(model=None, env=None, y=0.6, iterN=1000):
 
 
 def QLearning(initState=None, iterN=100000, env=None, model=None,
-              eps=0.1, a=0.1, y=0.6, epLimit=-1, convN=5, convThresh=0.01, logging=True, convMethod="trainR", otherModel=None,
-              mpQueue=None, returnQ=None, syncB=-1, syncE=-1, aggWmp=None, mpEnd=None):
+              eps=0.1, a=0.1, halfAlpha=True, y=0.6, epLimit=-1, convN=5, convThresh=0.01, logging=True, convMethod="trainR", otherModel=None,
+              mpQueue=None, returnQ=None, syncB=-1, syncE=-1, aggWmp=None, mpEnd=None, seed=None, noReset=False):
+
+    if seed is None:
+        rng = default_rng()
+    else:
+        rng = default_rng(seed)
+
     sims = 0
     backups = 0
     rewards = np.zeros(iterN)
     rewardsAvg = [0]
     avg = -1000
     diffs = []
-    lastHyperChange=-1
+    lastHyperChange = -1
 
     if aggWmp is not None:
         aggW = np.frombuffer(aggWmp.get_obj()).reshape(model.getW().shape)
 
+    # only get state once
+    if noReset:
+        state = env.reset()
+
     for e in range(iterN):
-        if initState is None:
-            state = env.reset()
-        else:
-            state = initState
-            # need to set state of env, not always supported
+        if not noReset:
+            if initState is None:
+                state = env.reset()
+            else:
+                state = initState
+                # need to set state of env, not always supported
 
         term = False
-        i = -1
+        i = 0
         reward = 0
         while not term and (epLimit == -1 or i < epLimit):
-            i += 1
-            if random.uniform(0, 1) < eps:
+            if rng.random() < eps:
                 act = env.action_space.sample()
             else:
                 act = model.policy(state)
@@ -165,11 +174,14 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
             state = nextS
 
             if syncB != -1 and backups % syncB == 0:
+                # print(backups)
                 if mpEnd.value:
                     break
                 mpQueue.put(model.getW())
                 mpQueue.join()
                 model.setW(aggW)
+
+            i += 1
 
         rewards[e] = reward
 
@@ -177,7 +189,7 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
         if syncB != -1 and backups % syncB == 0:
             if mpEnd.value:
                 break
-        if syncE != -1 and e % syncE == 0:
+        if syncE != -1 and (e+1) % syncE == 0:
             if mpEnd.value:
                 break
             mpQueue.put(model.getW())
@@ -185,7 +197,7 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
             model.setW(aggW)
 
         # convergence testing
-        if convN != -1 and e % convN == 0:
+        if convN != -1 and (e+1) % convN == 0:
             if convMethod == "score":
                 # tests without exploration or updating during the episode
                 prev = avg
@@ -196,8 +208,8 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
                 diff = abs(avg - prev)
                 if diff < convThresh and avg > 0:
                     if returnQ is not None:
-                        returnQ.put((model, sims, backups, e, avg, rewards[:e + 1], np.array(rewardsAvg)))
-                    return model, sims, backups, e, avg, rewards[:e + 1], np.array(rewardsAvg)
+                        returnQ.put((model, sims, backups, (e+1), avg, rewards[:e + 1], np.array(rewardsAvg)))
+                    return model, sims, backups, (e+1), avg, rewards[:e + 1], np.array(rewardsAvg)
 
             elif convMethod == "trainR":
                 if e >= 2 * convN:
@@ -215,8 +227,8 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
                         #     eps = 0
                         # else:
                         if returnQ is not None:
-                            returnQ.put((model, sims, backups, e, avg, rewards[:e+1], np.array(rewardsAvg)))
-                        return model, sims, backups, e, avg, rewards[:e+1], np.array(rewardsAvg)
+                            returnQ.put((model, sims, backups, (e+1), avg, rewards[:e+1], np.array(rewardsAvg)))
+                        return model, sims, backups, (e+1), avg, rewards[:e+1], np.array(rewardsAvg)
 
             elif convMethod == "compare":
                 diff = model.diff(otherModel)
@@ -224,21 +236,32 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
 
                 if logging:
                     print("diff " + str(diff))
+                    # print(backups)
                 if diff < convThresh:
                     if returnQ is not None:
-                        returnQ.put((model, sims, backups, e, avg, rewards[:e + 1], np.array(diffs)))
-                    return model, sims, backups, e, avg, rewards[:e + 1], np.array(diffs)
+                        returnQ.put((model, sims, backups, (e+1), avg, rewards[:e + 1], np.array(diffs)))
+                    return model, sims, backups, (e+1), avg, rewards[:e + 1], np.array(diffs)
 
-                if len(diffs) > 21 and e % (convN * 10) == 0 and \
+                if len(diffs) > 21 and (e+1) % (convN * 10) == 0 and \
                         (e - lastHyperChange > 3*(convN * 10) or lastHyperChange == -1):
+
+                    avgR = np.mean(rewards[e - convN:e + 1])
                     diffsNp = np.array(diffs)
-                    avgDiff = np.mean(diffsNp[len(diffs) - 10:])
-                    prev = np.mean(diffsNp[len(diffs) - 2 * 10:len(diffs) - 10])
-                    if prev > avgDiff:
-                        a = a / 2
-                        if logging:
-                            print("half alpha to " + str(a))
-                        lastHyperChange = e
+                    avgDiff = np.mean(diffsNp[-10:])
+                    prev = np.mean(diffsNp[-20:-10])
+                    # increased error in past 20 measurements
+                    if prev < avgDiff:
+                        # print(avgDiff)
+                        # print(prev)
+                        if halfAlpha:
+                            a = a / 2
+                            if logging:
+                                print("half alpha to " + str(a))
+                            lastHyperChange = e
+                        else:
+                            if returnQ is not None:
+                                returnQ.put((model, sims, backups, (e+1), avgR, rewards[:e + 1], np.array(diffs)))
+                            return model, sims, backups, (e+1), avgR, rewards[:e + 1], np.array(diffs)
 
     if convN != -1:
         avg = np.mean(rewards[e - convN + 1:])
@@ -246,9 +269,9 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
 
     if convMethod == "compare":
         if returnQ is not None:
-            returnQ.put((model, sims, backups, e, avg, rewards[:e + 1], np.array(diffs)))
-        return model, sims, backups, e, avg, rewards[:e + 1], np.array(diffs)
+            returnQ.put((model, sims, backups, (e+1), avg, rewards[:e + 1], np.array(diffs)))
+        return model, sims, backups, (e+1), avg, rewards[:e + 1], np.array(diffs)
     else:
         if returnQ is not None:
-            returnQ.put((model, sims, backups, e, avg, rewards[:e + 1], np.array(rewardsAvg)))
-        return model, sims, backups, e, avg, rewards, np.array(rewardsAvg)
+            returnQ.put((model, sims, backups, (e+1), avg, rewards[:e + 1], np.array(rewardsAvg)))
+        return model, sims, backups, (e+1), avg, rewards, np.array(rewardsAvg)

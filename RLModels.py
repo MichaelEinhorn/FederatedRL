@@ -1,5 +1,4 @@
 import numpy as np
-import random
 import gym
 import ctypes
 import copy
@@ -31,6 +30,12 @@ class QTabular:
         else:
             self.rng = default_rng(seed)
 
+    def resetSeed(self, seed=None):
+        if seed is None:
+            self.rng = default_rng()
+        else:
+            self.rng = default_rng(seed)
+
     def policy(self, state):
         if self.stoch:
             qV = softmax(self.q_tab[state])
@@ -50,7 +55,7 @@ class QTabular:
     def bellman(self, env, y=0.6):
         q_tab_old = copy.deepcopy(self.q_tab)
         maxQ_a = np.amax(q_tab_old, axis=1)
-        if env.rewardType == "NormNextState":
+        if "Action" not in env.rewardType:
             for s in range(self.NS):
                 for a in range(self.NA):
                     self.q_tab[s, a] = np.sum(env.transMat[s, a] * (env.rewardMat + y * maxQ_a))
@@ -94,14 +99,22 @@ class QTabularFedAvg():
         self.runAgg = False
         self.done = False
 
-    def start(self, QLearnF=None, QLearningKWArgs=None):
+    def start(self, QLearnF=None, QLearningKWArgs=None, model=None, env=None):
         self.done = False
         parr = [None] * self.P
         mpEnd = mp.Value(ctypes.c_bool, False)
         kwargs = QLearningKWArgs
         kwargs.update(utils.getArgs(mpQueue=self.Queue, returnQ=self.returnQ, aggWmp=self.shared_q_tab_mp, mpEnd=mpEnd))
         for i in range(self.P):
-            parr[i] = mp.Process(target=QLearnF, kwargs=kwargs)
+            # gives each thread its own seed
+            modelTemp = copy.deepcopy(model)
+            modelTemp.resetSeed(seed=self.rng.integers(2 ** 31 - 1))
+            envTemp = copy.deepcopy(env)
+            envTemp.reset(seed=self.rng.integers(2 ** 31 - 1))
+            kwargsTemp = utils.getArgs(env=envTemp, model=modelTemp)
+            kwargsTemp.update(kwargs)
+
+            parr[i] = mp.Process(target=QLearnF, kwargs=kwargsTemp)
             parr[i].start()
 
         aggT = threading.Thread(target=self.aggregate, args=(True,))
@@ -109,14 +122,14 @@ class QTabularFedAvg():
         aggT.start()
 
         out = [self.returnQ.get()]
-        print(out)
+        # print(out)
         # terminates aggregate
         self.Queue.put(None)
         mpEnd.value = True
 
         for i in range(1, self.P):
             out.append(self.returnQ.get())
-            print(out[i])
+            # print(out[i])
 
         self.done = True
 
@@ -133,7 +146,7 @@ class QTabularFedAvg():
             if arr[i] is None:
                 break
             # locked
-            print("aggregating")
+            # print("aggregating")
             self.aggs += 1
             self.q_tab = np.zeros(self.shape)
             for model in arr:
@@ -155,8 +168,6 @@ class QTabularFedAvg():
                 temp = None
 
 
-
-
 def cartPoleFeature(state, action, NF, NA):
     out = state * (action * 2 - 1)
     return out
@@ -173,6 +184,12 @@ class QLinAprox:
 
         self.w = np.zeros([self.NA, self.NF])
 
+        if seed is None:
+            self.rng = default_rng()
+        else:
+            self.rng = default_rng(seed)
+
+    def resetSeed(self, seed=None):
         if seed is None:
             self.rng = default_rng()
         else:

@@ -1,5 +1,4 @@
 import numpy as np
-import random
 import time
 
 
@@ -8,6 +7,8 @@ def softmax(x, axis=-1):
         x = np.exp(x - np.max(x))
         return x / np.sum(x)
     x = np.exp(x - np.max(x, axis=axis, keepdims=True))
+    # x = np.exp(x)
+    # print(x)
     return x / np.sum(x, axis=axis, keepdims=True)
 
 
