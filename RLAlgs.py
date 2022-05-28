@@ -9,7 +9,7 @@ import collections
 import multiprocessing as mp
 
 
-def score(initState=None, iterN=100, env=None, model=None, epLimit=-1, printErr=False):
+def score(initState=None, iterN=100, env=None, model=None, epLimit=-1, printErr=False, stochOverride=None):
     rewards = np.zeros(iterN)
     for e in range(iterN):
         if initState is None:
@@ -22,7 +22,7 @@ def score(initState=None, iterN=100, env=None, model=None, epLimit=-1, printErr=
         reward = 0
         while not term and (epLimit == -1 or i < epLimit):
             i += 1
-            act = model.policy(state)
+            act = model.policy(state,stochOverride=stochOverride)
             state, r, term, info = env.step(act)
             reward += r
         if epLimit != -1 and i >= epLimit and printErr:
@@ -137,10 +137,11 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
     sims = 0
     backups = 0
     rewards = np.zeros(iterN)
-    rewardsAvg = [0]
+    rewardsAvg = []
     avg = -1000
     diffs = []
     lastHyperChange = -1
+    epsToBackup = []
 
     if aggWmp is not None:
         aggW = np.frombuffer(aggWmp.get_obj()).reshape(model.getW().shape)
@@ -156,6 +157,8 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
             else:
                 state = initState
                 # need to set state of env, not always supported
+
+        epsToBackup.append(backups)
 
         term = False
         i = 0
@@ -208,13 +211,13 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
                 diff = abs(avg - prev)
                 if diff < convThresh and avg > 0:
                     if returnQ is not None:
-                        returnQ.put((model, sims, backups, (e+1), avg, rewards[:e + 1], np.array(rewardsAvg)))
-                    return model, sims, backups, (e+1), avg, rewards[:e + 1], np.array(rewardsAvg)
+                        returnQ.put((model, sims, backups, epsToBackup, (e+1), avg, rewards[:e + 1], np.array(rewardsAvg)))
+                    return model, sims, backups, epsToBackup, (e+1), avg, rewards[:e + 1], np.array(rewardsAvg)
 
             elif convMethod == "trainR":
                 if e >= 2 * convN:
                     # converges if average reward of convN episodes is the same as the previous convN episodes
-                    avg = np.mean(rewards[e-convN:e+1])
+                    avg = np.mean(rewards[e+1 - convN:e + 1])
                     if logging:
                         print("episode " + str(e) + " r " + str(avg))
                     prev = np.mean(rewards[e-2*convN:e-convN])
@@ -227,25 +230,26 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
                         #     eps = 0
                         # else:
                         if returnQ is not None:
-                            returnQ.put((model, sims, backups, (e+1), avg, rewards[:e+1], np.array(rewardsAvg)))
-                        return model, sims, backups, (e+1), avg, rewards[:e+1], np.array(rewardsAvg)
+                            returnQ.put((model, sims, backups, epsToBackup, (e+1), avg, rewards[:e+1], np.array(rewardsAvg)))
+                        return model, sims, backups, epsToBackup, (e+1), avg, rewards[:e+1], np.array(rewardsAvg)
 
             elif convMethod == "compare":
                 diff = model.diff(otherModel)
                 diffs.append(diff)
+                avg = np.mean(rewards[e+1 - convN:e + 1])
+                rewardsAvg.append(avg)
 
                 if logging:
                     print("diff " + str(diff))
                     # print(backups)
                 if diff < convThresh:
                     if returnQ is not None:
-                        returnQ.put((model, sims, backups, (e+1), avg, rewards[:e + 1], np.array(diffs)))
-                    return model, sims, backups, (e+1), avg, rewards[:e + 1], np.array(diffs)
+                        returnQ.put((model, sims, backups, epsToBackup, (e+1), avg, rewardsAvg, diffs))
+                    return model, sims, backups, epsToBackup, (e+1), avg, rewardsAvg, diffs
 
                 if len(diffs) > 21 and (e+1) % (convN * 10) == 0 and \
                         (e - lastHyperChange > 3*(convN * 10) or lastHyperChange == -1):
 
-                    avgR = np.mean(rewards[e - convN:e + 1])
                     diffsNp = np.array(diffs)
                     avgDiff = np.mean(diffsNp[-10:])
                     prev = np.mean(diffsNp[-20:-10])
@@ -260,8 +264,8 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
                             lastHyperChange = e
                         else:
                             if returnQ is not None:
-                                returnQ.put((model, sims, backups, (e+1), avgR, rewards[:e + 1], np.array(diffs)))
-                            return model, sims, backups, (e+1), avgR, rewards[:e + 1], np.array(diffs)
+                                returnQ.put((model, sims, backups, epsToBackup, (e+1), avg, rewardsAvg, diffs))
+                            return model, sims, backups, epsToBackup, (e+1), avg, rewardsAvg, diffs
 
     if convN != -1:
         avg = np.mean(rewards[e - convN + 1:])
@@ -269,9 +273,9 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
 
     if convMethod == "compare":
         if returnQ is not None:
-            returnQ.put((model, sims, backups, (e+1), avg, rewards[:e + 1], np.array(diffs)))
-        return model, sims, backups, (e+1), avg, rewards[:e + 1], np.array(diffs)
+            returnQ.put((model, sims, backups, epsToBackup, (e + 1), avg, rewardsAvg, diffs))
+        return model, sims, backups, (e + 1), avg, rewardsAvg, diffs
     else:
         if returnQ is not None:
-            returnQ.put((model, sims, backups, (e+1), avg, rewards[:e + 1], np.array(rewardsAvg)))
-        return model, sims, backups, (e+1), avg, rewards, np.array(rewardsAvg)
+            returnQ.put((model, sims, backups, epsToBackup, (e+1), avg, rewards[:e+1], np.array(rewardsAvg)))
+        return model, sims, backups, (e+1), epsToBackup, avg, rewards[:e+1], np.array(rewardsAvg)

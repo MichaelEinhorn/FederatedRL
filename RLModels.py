@@ -36,8 +36,11 @@ class QTabular:
         else:
             self.rng = default_rng(seed)
 
-    def policy(self, state):
-        if self.stoch:
+    def policy(self, state, stochOverride=None):
+        stoch = self.stoch
+        if stochOverride is not None:
+            stoch = stochOverride
+        if stoch:
             qV = softmax(self.q_tab[state])
             return self.rng.choice(range(self.NA), 1, p=qV)[0]
         else:
@@ -195,11 +198,15 @@ class QLinAprox:
         else:
             self.rng = default_rng(seed)
 
-    def policy(self, state):
+    def policy(self, state, stochOverride=None):
         qV = np.zeros(self.NA)
         for act in range(self.NA):
             qV[act] = np.sum(self.feat(state, act, self.NF, self.NA) * self.w[act])
-        if self.stoch:
+
+        stoch = self.stoch
+        if stochOverride is not None:
+            stoch = stochOverride
+        if stoch:
             qV = softmax(qV)
             return self.rng.choice(range(self.NA), 1, p=qV)[0]
         else:
@@ -220,7 +227,7 @@ class RandomPolicy:
         self.space = env.action_space
         self.w = None
 
-    def policy(self, state):
+    def policy(self, state, stochOverride=None):
         return self.space.sample()
 
     def backup(self, state, act, nextS, r, a=0.1, y=0.6):

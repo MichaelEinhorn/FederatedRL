@@ -16,3 +16,16 @@ def getArgs(*args, **kwargs):
     all_args = {("arg" + str(idx + 1)): arg for idx, arg in enumerate(args)}
     all_args.update(kwargs)
     return all_args
+
+
+def rowsToColumnsPython(arr):
+    n = len(arr)
+    m = len(arr[0])
+    # print(m)
+    # print(n)
+    out = [[0 for j in range(n)] for i in range(m)]
+    for j in range(n):
+        for i in range(m):
+            out[i][j] = arr[j][i]
+    return out
+

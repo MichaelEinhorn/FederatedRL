@@ -26,8 +26,8 @@ class RandomMDP:
             self.transMat = np.power(self.transMat, transitionParam)
             self.transMat = softmax(self.transMat, axis=2)
 
-        print("reward")
-        print(self.transMat)
+        # print("reward")
+        # print(self.transMat)
 
         if self.rewardType == "NormNextState":
             self.rewardMat = np.zeros([NS])
@@ -39,7 +39,7 @@ class RandomMDP:
             self.rewardMat = np.zeros([NA, NS])
             self.rewardMat = self.rng.standard_normal(self.rewardMat.shape)
 
-        print(self.rewardMat)
+        # print(self.rewardMat)
 
     def reset(self, seed=None):
         self.state = 0
