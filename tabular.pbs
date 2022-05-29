@@ -11,3 +11,6 @@
 cd $PBS_O_WORKDIR 
 
 module load anaconda3/2021.05
+conda activate gym
+python test.py
+
