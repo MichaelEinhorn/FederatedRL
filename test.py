@@ -25,6 +25,7 @@ states = 4
 actions = 3
 
 jsonFileName = "mdpv3.json"
+#jsonFileName = "~/p-smaguluri3-0/RL/" + jsonFileName
 jsonDict = {}
 
 if os.path.isfile(jsonFileName):

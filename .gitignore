@@ -1,5 +1,6 @@
 .idea/
-
+/Logs
+/Graphs
 *.png
 
 # Byte-compiled / optimized / DLL files
