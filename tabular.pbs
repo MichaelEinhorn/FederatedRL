@@ -1,16 +1,15 @@
 #PBS -N qtabularTest           # job name
 #PBS -A GT-smaguluri3               # account to which job is charged, ex: GT-gburdell3
 #PBS -l nodes=1:ppn=4,pmem=6gb    # smallest resource pool
-#PBS -l walltime=8:00:00          # duration of the job (ex: 15 min)
+#PBS -l walltime=08:00:00          # duration of the job (ex: 15 min)
 #PBS -q embers					# can be terminated any time
 #PBS -j oe                      # combine output and error messages into 1 file
 #PBS -o Logs/log.out       # output file name
 #PBS -m abe                     # event notification, set to email on start, end, or fail
 #PBS -M meinhorn6@gatech.edu  # email to send notifications to
 
-cd $PBS_O_WORKDIR 
+cd $PBS_O_WORKDIR
 
 module load anaconda3/2021.05
 conda activate gym
 python test.py
-
