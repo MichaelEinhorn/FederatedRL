@@ -73,8 +73,8 @@ def mdpTest(fileExt=""):
     # print("bellman")
     # print(modelBell.q_tab)
 
-    model, sims, backups, epsToBackup, episodes, avgR, rList, diffs = RLAlgs.QLearning(env=env, model=model, eps=epsilon, epLimit=100,
-                                                                          a=alpha, halfAlpha=False, y=discount, convN=convN, convThresh=0.01,
+    out_dict = RLAlgs.QLearning(env=env, model=model, epsilon=epsilon, epLimit=100,
+                                                                          alpha=alpha, halfAlpha=False, gamma=discount, convN=convN, convThresh=0.01,
                                                                           convMethod="compare", otherModel=modelBell,
                                                                           logging=False, noReset=True)
 
@@ -84,12 +84,15 @@ def mdpTest(fileExt=""):
     # print(modelBell.q_tab)
     print("diff " + str(model.diff(modelBell)))
 
-    print("simulation steps " + str(sims))
-    print("episodes " + str(episodes))
-    print("avg train reward " + str(avgR))
+    print("simulation steps " + str(out_dict["sims"]))
+    print("episodes " + str(out_dict["episodes"]))
+    print("avg train reward " + str(out_dict["score"]))
 
     score, sList = RLAlgs.score(model=model, env=env, epLimit=10000, iterN=1, printErr=False, stochOverride=False)
     scoreStoch, sListStoch = RLAlgs.score(model=model, env=env, epLimit=10000, iterN=1, printErr=False, stochOverride=True)
+
+    out_dict["endScore"] = score
+    out_dict["endScoreStoch"] = scoreStoch
 
     print("score " + str((score, scoreStoch)))
 
@@ -98,10 +101,15 @@ def mdpTest(fileExt=""):
     scoreStochBell, sListStochBell = RLAlgs.score(model=modelBell, env=env, epLimit=10000, iterN=1, printErr=False,
                                                   stochOverride=True)
 
+    out_dict["endScoreBell"] = scoreBell
+    out_dict["endScoreStochBell"] = scoreStochBell
+
     scoreRand, _ = RLAlgs.score(model=RLModels.RandomPolicy(env), env=env, epLimit=10000, iterN=1, printErr=False,
                              stochOverride=False)
 
-    jsonDict[jsonDictKey] = (sims, backups, epsToBackup, episodes, avgR, rList, diffs, score, scoreStoch, scoreBell, scoreStochBell, scoreRand)
+    out_dict["endScoreRand"] = scoreRand
+
+    jsonDict[jsonDictKey] = out_dict
     with open(jsonFileName, 'w') as f:
         json.dump(jsonDict, f)
 
@@ -142,12 +150,13 @@ def mdpTestFed(fileExt=""):
                            syncB=syncBackups, syncE=-1, noReset=True)
     print(kwArgs)
 
-    federatedModel = RLModels.QTabularFedAvg(model.getW().shape, stochasticPolicy=True, p=fedP)
+    federatedModel = RLModels.QTabularFedAvg(model.getWeight().shape, stochasticPolicy=True, p=fedP)
 
     out, aggs = federatedModel.start(RLAlgs.QLearning, QLearningKWArgs=kwArgs, env=env, model=model)
-    model, sims, backups, epsToBackup, episodes, avgR, rList, diffs = out[0]
+    out_dict = out[0]
+    out_dict["aggs"] = aggs
 
-    modelF, simsF, backupsF, epsToBackupF, episodesF, avgRF, rListF, diffsF = tuple(utils.rowsToColumnsPython(out))
+    # modelF, simsF, backupsF, epsToBackupF, episodesF, avgRF, rListF, diffsF = tuple(utils.rowsToColumnsPython(out))
 
     # print("learning")
     # print(model.q_tab)
@@ -155,24 +164,31 @@ def mdpTestFed(fileExt=""):
     # print(modelBell.q_tab)
     print("diff " + str(model.diff(modelBell)))
 
-    print("simulation steps " + str(sims))
-    print("episodes " + str(episodes))
-    print("avg train reward " + str(avgR))
+    print("simulation steps " + str(out_dict["sims"]))
+    print("episodes " + str(out_dict["episodes"]))
+    print("avg train reward " + str(out_dict["score"]))
 
     score, sList = RLAlgs.score(model=model, env=env, epLimit=10000, iterN=1, printErr=False, stochOverride=False)
     scoreStoch, sListStoch = RLAlgs.score(model=model, env=env, epLimit=10000, iterN=1, printErr=False,
                                           stochOverride=True)
 
     print("score " + str((score, scoreStoch)))
+    out_dict["endScore"] = score
+    out_dict["endScoreStoch"] = scoreStoch
 
     scoreBell, sListBell = RLAlgs.score(model=modelBell, env=env, epLimit=10000, iterN=1, printErr=False, stochOverride=False)
     scoreStochBell, sListStochBell = RLAlgs.score(model=modelBell, env=env, epLimit=10000, iterN=1, printErr=False,
                                           stochOverride=True)
 
+    out_dict["endScoreBell"] = scoreBell
+    out_dict["endScoreStochBell"] = scoreStochBell
+
     scoreRand, _ = RLAlgs.score(model=RLModels.RandomPolicy(env), env=env, epLimit=10000, iterN=1, printErr=False, stochOverride=False)
 
-    print((simsF, backupsF, episodesF, avgRF, rListF, diffsF, aggs, score, scoreStoch, scoreBell, scoreStochBell, scoreRand))
-    jsonDict[jsonDictKey] = (simsF, backupsF, epsToBackupF, episodesF, avgRF, rListF, diffsF, aggs, score, scoreStoch, scoreBell, scoreStochBell, scoreRand)
+    out_dict["endScoreRand"] = scoreRand
+
+    print(out_dict)
+    jsonDict[jsonDictKey] = out_dict
     with open(jsonFileName, 'w') as f:
         json.dump(jsonDict, f)
 
@@ -212,8 +228,8 @@ def taxiTest():
     env = gym.make("Taxi-v3").env
     print('NS:' + str(env.observation_space.n) + ' NA:' + str(env.action_space.n))
     model = RLModels.QTabular(env, stochasticPolicy=True)
-    model, sims, backups, episodes, avgR, rList, rewardsAvg = RLAlgs.QLearning(env=env, model=model, eps=0.1,
-                                                                               a=0.1, y=discount, convN=100, convThresh=0.01)
+    model, sims, backups, episodes, avgR, rList, rewardsAvg = RLAlgs.QLearning(env=env, model=model, epsilon=0.1,
+                                                                               alpha=0.1, gamma=discount, convN=100, convThresh=0.01)
     print("simulation steps " + str(sims))
     print("episodes " + str(episodes))
     print("avg train reward " + str(avgR))
@@ -230,8 +246,8 @@ def cartTest():
     env = gym.make("CartPole-v1").env
     model = RLModels.QLinAprox(env, RLModels.cartPoleFeature, stochasticPolicy=True)
     # model = RLAlgs.RandomPolicy(env)
-    model, sims, backups, episodes, avgR, rList, rewardsAvg = RLAlgs.QLearning(env=env, model=model, iterN=1000, eps=0,
-                                                                               a=0.01, y=discount, convN=-1, convThresh=0.01)
+    model, sims, backups, episodes, avgR, rList, rewardsAvg = RLAlgs.QLearning(env=env, model=model, iterN=1000, epsilon=0,
+                                                                               alpha=0.01, gamma=discount, convN=-1, convThresh=0.01)
 
     print("train rewards")
     print(rList)

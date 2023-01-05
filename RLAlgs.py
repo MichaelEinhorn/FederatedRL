@@ -3,10 +3,13 @@ import gym
 import copy
 from numpy.random import default_rng
 
-from utils import softmax
+from core import softmax, getKW
+import core
 
 import collections
 import multiprocessing as mp
+
+# evaluate a model on an environment return mean reward and list of rewards
 
 
 def score(initState=None, iterN=100, env=None, model=None, epLimit=-1, printErr=False, stochOverride=None):
@@ -22,11 +25,12 @@ def score(initState=None, iterN=100, env=None, model=None, epLimit=-1, printErr=
         reward = 0
         while not term and (epLimit == -1 or i < epLimit):
             i += 1
-            act = model.policy(state,stochOverride=stochOverride)
+            act = model.policy(state, stochOverride=stochOverride)
             state, r, term, info = env.step(act)
             reward += r
         if epLimit != -1 and i >= epLimit and printErr:
-            print("testing episode " + str(e) + " timed out with r " + str(reward))
+            print("testing episode " + str(e) +
+                  " timed out with r " + str(reward))
         rewards[e] = reward
     return np.mean(rewards), rewards
 
@@ -93,7 +97,7 @@ def TDLearnNStep(env=None, n=1, a=0.1, y=0.6, lam=0.9, eps=0.1, iterN=100000, ep
             act = actP
 
         if e % 100 == 0:
-            #print(reward / 100)
+            # print(reward / 100)
             reward = 0
 
             diff = np.linalg.norm(q_tab - otherModel.q_tab)
@@ -119,15 +123,43 @@ def TDLearnNStep(env=None, n=1, a=0.1, y=0.6, lam=0.9, eps=0.1, iterN=100000, ep
     return q_tab, sims, backups
 
 
+# get the bellman optimal solution. Only works for matrix MDPs
 def QLearningTabularBellman(model=None, env=None, y=0.6, iterN=1000):
     for i in range(iterN):
         model.bellman(env=env, y=y)
     return model
 
 
-def QLearning(initState=None, iterN=100000, env=None, model=None,
-              eps=0.1, a=0.1, halfAlpha=True, y=0.6, epLimit=-1, convN=5, convThresh=0.01, logging=True, convMethod="trainR", otherModel=None,
-              mpQueue=None, returnQ=None, syncB=-1, syncE=-1, aggWmp=None, mpEnd=None, seed=None, noReset=False):
+# runs QLearning Algorithm
+# works for both federated and single agent
+def QLearning(initState=None,
+              iterN=100000,  # number of episodes
+              env=None,  # open AI gym obj
+              model=None,  # RL Model Object
+              epsilon=0.1,  # epsilon greedy exploration
+              alpha=0.1,  # learning rate
+              halfAlpha=True,  # if true, alpha is halved when convergence is detected
+              gamma=0.6,  # discount rate
+              epLimit=-1,  # end episode after this many steps
+              convN=5,  # test convergence every N episodes
+              convThresh=0.01,  # threshold for convergence
+              logging=True,
+              # score: run the model on test env and determine convergence when test reward is flat
+              # trainR: check if training reward is flat
+              # compare: check distance to a reference Q table such as bellman optimal
+              convMethod="trainR",
+              otherModel=None,
+              # mp Queues
+              AggWeightQ=None,
+              returnQ=None,
+              # only use one or the other
+              syncB=-1,  # sync every syncB backups
+              syncE=-1,  # sync every syncE episodes
+              WeightSharedMem=None,  # shared memory for synched weights
+              mpEnd=None, # flag to exit training for all processes after any process returns. Checked before a sync weights occurs
+              seed=None,
+              noReset=False  # reset the environment at the start of each episode
+              ):
 
     if seed is None:
         rng = default_rng()
@@ -137,14 +169,16 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
     sims = 0
     backups = 0
     rewards = np.zeros(iterN)
-    rewardsAvg = []
-    avg = -1000
+    avgRewArr = []
+    avgTestScoreArr = []
+    avgRew = -1000
     diffs = []
     lastHyperChange = -1
     epsToBackup = []
 
-    if aggWmp is not None:
-        aggW = np.frombuffer(aggWmp.get_obj()).reshape(model.getW().shape)
+    if WeightSharedMem is not None:
+        aggW = np.frombuffer(WeightSharedMem.get_obj()
+                             ).reshape(model.getW().shape)
 
     # only get state once
     if noReset:
@@ -164,7 +198,7 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
         i = 0
         reward = 0
         while not term and (epLimit == -1 or i < epLimit):
-            if rng.random() < eps:
+            if rng.random() < epsilon:
                 act = env.action_space.sample()
             else:
                 act = model.policy(state)
@@ -173,15 +207,15 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
             nextS, r, term, info = env.step(act)
             reward += r
             backups += 1
-            model.backup(state, act, nextS, r, a, y)
+            model.backup(state, act, nextS, r, alpha, gamma)
             state = nextS
 
             if syncB != -1 and backups % syncB == 0:
                 # print(backups)
                 if mpEnd.value:
                     break
-                mpQueue.put(model.getW())
-                mpQueue.join()
+                AggWeightQ.put(model.getW())
+                AggWeightQ.join()
                 model.setW(aggW)
 
             i += 1
@@ -195,87 +229,103 @@ def QLearning(initState=None, iterN=100000, env=None, model=None,
         if syncE != -1 and (e+1) % syncE == 0:
             if mpEnd.value:
                 break
-            mpQueue.put(model.getW())
-            mpQueue.join()
+            AggWeightQ.put(model.getW())
+            AggWeightQ.join()
             model.setW(aggW)
 
         # convergence testing
         if convN != -1 and (e+1) % convN == 0:
             if convMethod == "score":
+                avgRew = np.mean(rewards[e+1 - convN:e + 1])
+                avgRewArr.append(avgRew)
                 # tests without exploration or updating during the episode
-                prev = avg
-                avg, _ = score(iterN=20, model=model, env=env, epLimit=1000)
+                prevTestScore = avgTestScore
+                avgTestScore, _ = score(iterN=20, model=model, env=env, epLimit=1000)
                 if logging:
-                    print("episode " + str(e) + " r " + str(avg))
-                rewardsAvg.append(avg)
-                diff = abs(avg - prev)
-                if diff < convThresh and avg > 0:
+                    print("episode " + str(e) + " r " + str(avgTestScore))
+                avgTestScoreArr.append(avgTestScore)
+                diff = abs(avgTestScore - prevTestScore)
+                diffs.append(diff)
+                if diff < convThresh and avgRew > 0:
+                    returnDict = getKW(model=model, sims=sims, backups=backups, epsToBackup=epsToBackup, episodes=(e+1), avgTestScore=avgTestScore, avgTestScoreArr=np.array(avgTestScoreArr),
+                                       avgRew=avgRew, rewards=rewards[:e + 1], avgRewArr=np.array(avgRewArr), diffs=diffs, comment="constant test score")
                     if returnQ is not None:
-                        returnQ.put((model, sims, backups, epsToBackup, (e+1), avg, rewards[:e + 1], np.array(rewardsAvg)))
-                    return model, sims, backups, epsToBackup, (e+1), avg, rewards[:e + 1], np.array(rewardsAvg)
+                        returnQ.put(returnDict)
+                    return returnDict
 
             elif convMethod == "trainR":
                 if e >= 2 * convN:
                     # converges if average reward of convN episodes is the same as the previous convN episodes
-                    avg = np.mean(rewards[e+1 - convN:e + 1])
+                    avgRew = np.mean(rewards[e+1 - convN:e + 1])
                     if logging:
-                        print("episode " + str(e) + " r " + str(avg))
-                    prev = np.mean(rewards[e-2*convN:e-convN])
-                    rewardsAvg.append(avg)
-                    diff = abs(avg - prev)
-                    if diff < convThresh and avg > 0:
+                        print("episode " + str(e) + " r " + str(avgRew))
+                    prevAvgRew = np.mean(rewards[e-2*convN:e-convN])
+                    avgRewArr.append(avgRew)
+                    diff = abs(avgRew - prevAvgRew)
+                    diffs.append(diff)
+                    if diff < convThresh and avgRew > 0:
                         # print("reward difference " + str(diff))
                         # if eps != 0:
                         #     print("training no eps")
                         #     eps = 0
                         # else:
+                        returnDict = getKW(model=model, sims=sims, backups=backups, epsToBackup=epsToBackup, episodes=(e+1),
+                                       avgRew=avgRew, rewards=rewards[:e + 1], avgRewArr=np.array(avgRewArr), diffs=diffs, comment="constant train reward")
                         if returnQ is not None:
-                            returnQ.put((model, sims, backups, epsToBackup, (e+1), avg, rewards[:e+1], np.array(rewardsAvg)))
-                        return model, sims, backups, epsToBackup, (e+1), avg, rewards[:e+1], np.array(rewardsAvg)
+                            returnQ.put(returnDict)
+                        return returnDict
 
             elif convMethod == "compare":
                 diff = model.diff(otherModel)
                 diffs.append(diff)
-                avg = np.mean(rewards[e+1 - convN:e + 1])
-                rewardsAvg.append(avg)
+                avgRew = np.mean(rewards[e+1 - convN:e + 1])
+                avgRewArr.append(avgRew)
 
                 if logging:
                     print("diff " + str(diff))
                     # print(backups)
                 if diff < convThresh:
+                    returnDict = getKW(model=model, sims=sims, backups=backups, epsToBackup=epsToBackup, episodes=(e+1),
+                                       avgRew=avgRew, rewards=rewards[:e + 1], avgRewArr=np.array(avgRewArr), diffs=diffs, comment="converged distance")
                     if returnQ is not None:
-                        returnQ.put((model, sims, backups, epsToBackup, (e+1), avg, rewardsAvg, diffs))
-                    return model, sims, backups, epsToBackup, (e+1), avg, rewardsAvg, diffs
+                        returnQ.put(returnDict)
+                    return returnDict
 
                 if len(diffs) > 21 and (e+1) % (convN * 10) == 0 and \
                         (e - lastHyperChange > 3*(convN * 10) or lastHyperChange == -1):
 
                     diffsNp = np.array(diffs)
                     avgDiff = np.mean(diffsNp[-10:])
-                    prev = np.mean(diffsNp[-20:-10])
+                    prevAvgRew = np.mean(diffsNp[-20:-10])
                     # increased error in past 20 measurements
-                    if prev < avgDiff:
+                    if prevAvgRew < avgDiff:
                         # print(avgDiff)
                         # print(prev)
                         if halfAlpha:
-                            a = a / 2
+                            alpha = alpha / 2
                             if logging:
-                                print("half alpha to " + str(a))
+                                print("half alpha to " + str(alpha))
                             lastHyperChange = e
                         else:
+                            returnDict = getKW(model=model, sims=sims, backups=backups, epsToBackup=epsToBackup, episodes=(e+1),
+                                               score=avgRew, rewards=rewards[:e + 1], scoresArr=np.array(avgRewArr), diffs=diffs, comment="constant distance")
                             if returnQ is not None:
-                                returnQ.put((model, sims, backups, epsToBackup, (e+1), avg, rewardsAvg, diffs))
-                            return model, sims, backups, epsToBackup, (e+1), avg, rewardsAvg, diffs
+                                returnQ.put(returnDict)
+                            return returnDict
+
+    # iterN episodes have passed
+    avgRew = np.mean(rewards[e - convN + 1:])
+    avgRewArr.append(avgRew)
+    returnDict = getKW(model=model, sims=sims, backups=backups, epsToBackup=epsToBackup, episodes=(e+1),
+                       score=avgRew, rewards=rewards[:e + 1], scoresArr=np.array(avgRewArr), diffs=diffs, comment="max episodes")
 
     if convN != -1:
-        avg = np.mean(rewards[e - convN + 1:])
-    rewardsAvg.append(avg)
+        if convMethod == "score":
+            avgTestScore, _ = score(iterN=20, model=model, env=env, epLimit=1000)
+            avgTestScoreArr.append(avgTestScore)
+            returnDict["avgTestScore"] = avgTestScore
+            returnDict["avgTestScoreArr"] = np.array(avgTestScoreArr)
 
-    if convMethod == "compare":
-        if returnQ is not None:
-            returnQ.put((model, sims, backups, epsToBackup, (e + 1), avg, rewardsAvg, diffs))
-        return model, sims, backups, (e + 1), avg, rewardsAvg, diffs
-    else:
-        if returnQ is not None:
-            returnQ.put((model, sims, backups, epsToBackup, (e+1), avg, rewards[:e+1], np.array(rewardsAvg)))
-        return model, sims, backups, (e+1), epsToBackup, avg, rewards[:e+1], np.array(rewardsAvg)
+    if returnQ is not None:
+        returnQ.put(returnDict)
+    return returnDict
