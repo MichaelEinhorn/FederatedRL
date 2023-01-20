@@ -18,20 +18,25 @@ epsilon = 1
 fedP = 10
 syncBackups = 100 * convN
 stochasticPolicy = True
-envSeed = 0
+envSeed = 3701
 trial = 0
 
 states = 4
 actions = 3
 
-jsonFileName = "mdpv3.json"
-#jsonFileName = "~/p-smaguluri3-0/RL/" + jsonFileName
+jsonFilePrefix = "mdpv4_"
+dirPath = "~/scratch/RL"
 jsonDict = {}
 
-if os.path.isfile(jsonFileName):
-    jsonFile = open(jsonFileName)
-    jsonDict = json.load(jsonFile)
-    jsonFile.close()
+windows = False
+if os.name == 'nt':
+    windows = True
+    dirPath = "C:/Users/Michael Einhorn/Documents/GTML/RL"
+
+# if os.path.isfile(jsonFileName):
+#     jsonFile = open(jsonFileName)
+#     jsonDict = json.load(jsonFile)
+#     jsonFile.close()
 
 
 def benchBell():
@@ -55,10 +60,13 @@ def benchBell():
 
 
 # smaller random MDP to be solved exactly with bellman
-def mdpTest(fileExt=""):
+def mdpTest():
 
     jsonDictKey = str((convN, alpha, discount, epsilon, 1, -1, stochasticPolicy, envSeed, trial))
-    if jsonDictKey in jsonDict:
+    jsonFileSplitName = dirPath + "/" + jsonFilePrefix + ".json"
+
+    # if jsonDictKey in jsonDict:
+    if os.path.isfile(jsonFileSplitName):
         print("skipping " + jsonDictKey)
         return
     print("running " + jsonDictKey)
@@ -110,7 +118,7 @@ def mdpTest(fileExt=""):
     out_dict["endScoreRand"] = scoreRand
 
     jsonDict[jsonDictKey] = out_dict
-    with open(jsonFileName, 'w') as f:
+    with open(jsonFileSplitName, 'w') as f:
         json.dump(jsonDict, f)
 
     # print("avg reward " + str(score))
@@ -127,10 +135,13 @@ def mdpTest(fileExt=""):
     # plt.savefig("trainingMDP" + fileExt + ".png")
 
 
-def mdpTestFed(fileExt=""):
+def mdpTestFed():
 
     jsonDictKey = str((convN, alpha, discount, epsilon, fedP, syncBackups, stochasticPolicy, envSeed, trial))
-    if jsonDictKey in jsonDict:
+    jsonFileSplitName = dirPath + "/" + jsonFilePrefix + ".json"
+    
+    # if jsonDictKey in jsonDict:
+    if os.path.isfile(jsonFileSplitName):
         print("skipping " + jsonDictKey)
         return
     print("running " + jsonDictKey)
@@ -189,7 +200,7 @@ def mdpTestFed(fileExt=""):
 
     print(out_dict)
     jsonDict[jsonDictKey] = out_dict
-    with open(jsonFileName, 'w') as f:
+    with open(jsonFileSplitName, 'w') as f:
         json.dump(jsonDict, f)
 
     # print("avg reward " + str(score))
@@ -268,14 +279,45 @@ def cartTest():
 if __name__ == '__main__':
     np.set_printoptions(suppress=True)
 
-    convN = 1
-    syncBackups = 1
-    # benchBell
-    for trial in range(3):
-        for epsilon in [1]:
-            for syncBackups in [10000, 1000, 100, 10, 1]:
-                for fedP in [2, 4, 6, 8, 10]:
-                    for alpha in [1, 0.8, 0.6, 0.4, 0.2, 0.1, 0.01]:
-                        # plt.clf()
-                        mdpTest(fileExt="alpha_" + str(alpha) + "_sync_" + str(syncBackups) + "_eps_" + str(epsilon))
-                        mdpTestFed(fileExt="alpha_" + str(alpha) + "_sync_" + str(syncBackups) + "_eps_" + str(epsilon))
+    # jsonDictKey = str((convN, alpha, discount, epsilon, fedP, syncBackups, stochasticPolicy, envSeed, trial))
+    # # benchBell
+    # for trial in range(3):
+    #     for epsilon in [1]:
+    #         for syncBackups in [10000, 1000, 100, 10, 1]:
+    #             for fedP in [2, 4, 6, 8, 10]:
+    #                 for alpha in [1, 0.8, 0.6, 0.4, 0.2, 0.1, 0.01]:
+    #                     # plt.clf()
+    #                     mdpTest(fileExt="alpha_" + str(alpha) + "_sync_" + str(syncBackups) + "_eps_" + str(epsilon))
+    #                     mdpTestFed(fileExt="alpha_" + str(alpha) + "_sync_" + str(syncBackups) + "_eps_" + str(epsilon))
+    import argparse
+    # add args for trial, epsilon, syncBackups, fedP, alpha, convN, discount, stochasticPolicy
+    parser = argparse.ArgumentParser()
+    parser.add_argument('prefix', type=str)
+    parser.add_argument('--trial', type=int, default=0)
+    parser.add_argument('--epsilon', type=float, default=1)
+    parser.add_argument('--syncBackups', type=int, default=10000)
+    parser.add_argument('--fedP', type=int, default=1)
+    parser.add_argument('--alpha', type=float, default=1)
+    parser.add_argument('--convN', type=int, default=10)
+    parser.add_argument('--discount', type=float, default=0.6)
+    parser.add_argument('--stochasticPolicy', type=bool, default=True)
+    
+    args = parser.parse_args()
+    jsonFilePrefix = args.prefix
+    trial = args.trial
+    epsilon = args.epsilon
+    syncBackups = args.syncBackups
+    fedP = args.fedP
+    alpha = args.alpha
+    convN = args.convN
+    discount = args.discount
+    stochasticPolicy = args.stochasticPolicy
+
+    envSeed = envSeed + trial
+
+    if fedP == 1:
+        mdpTest()
+    else:
+        mdpTestFed()
+
+
