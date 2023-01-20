@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=submitter
+#SBATCH --account=gts-smaguluri3
 #SBATCH -t1:12:00
 #SBATCH --output=submitter.txt
 #SBATCH -q inferno
