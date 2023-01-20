@@ -5,8 +5,9 @@ import subprocess
 
 from contextlib import redirect_stdout
 
-with open('submitLog.txt', 'w') as logf:
-    with redirect_stdout(logf):
+# with open('submitLog.txt', 'w') as logf:
+#     with redirect_stdout(logf):
+if True:
         # submits jobs to cluster based on variations of a template sh script
 
         fname = 'tExp.sh'

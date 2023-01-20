@@ -5,7 +5,7 @@
 #SBATCH --mem-per-cpu=1G            # Memory per core
 #SBATCH -t 0-3:00:00             		
 #SBATCH -q embers
-#SBATCH -o outputLogs/p#.txt
+#SBATCH -o ~/scratch/logs/p#.txt
 #SBATCH --mail-user=meinhorn6@gatech.edu
 #SBATCH --mail-type=FAIL
 
