@@ -292,7 +292,7 @@ if __name__ == '__main__':
     import argparse
     # add args for trial, epsilon, syncBackups, fedP, alpha, convN, discount, stochasticPolicy
     parser = argparse.ArgumentParser()
-    parser.add_argument('prefix', type=str)
+    parser.add_argument('--prefix', type=str)
     parser.add_argument('--trial', type=int, default=0)
     parser.add_argument('--epsilon', type=float, default=1)
     parser.add_argument('--syncBackups', type=int, default=10000)

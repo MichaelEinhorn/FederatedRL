@@ -19,7 +19,7 @@ if True:
             
         print(data)
 
-        prefix = "mdpv4_-#t-#sb-#f-#a-#e"
+        prefix = "mdpv4-t#-sb#-f#-a#-e#"
 
         if len(sys.argv) >= 3:
             replaceEx = sys.argv[2] == "-r"
@@ -85,7 +85,7 @@ if True:
                             nlines = strOut.count('\n')
                             print(nlines)
 
-                            while nlines > 15:
+                            while nlines > 40:
                                 result = subprocess.run(['squeue','--format="%.18i %.9P %j %.2t %.10M %.6D %R"', '-u', 'meinhorn6'], capture_output=True, text=True).stdout
                                 strOut = result
                                 result = subprocess.run(['squeue','--format="%.18i %.9P %j %.2t %.10M %.6D %R"', '-u', 'smaguluri3'], capture_output=True, text=True).stdout

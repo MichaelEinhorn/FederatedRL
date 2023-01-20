@@ -1,13 +1,15 @@
 #!/bin/bash
-#SBATCH -J submitter
-#SBATCH -A gts-smaguluri3
-#SBATCH -t 1-12:00
-#SBATCH -q inferno
-#SBATCH -o ~/scratch/logs/submitter.txt
+#SBATCH --job-name=submitter
+#SBATCH --account=gts-smaguluri3
+#SBATCH -N1 --ntasks-per-node=1                 # Number of nodes and cores required
+#SBATCH --mem-per-cpu=1G                        # Memory per core
+#SBATCH -t1-12:00:00
+#SBATCH -qinferno
+#SBATCH -o/storage/home/hcoda1/2/meinhorn6/scratch/logs/Submitter-%j.out
 #SBATCH --mail-user=meinhorn6@gatech.edu
 #SBATCH --mail-type=FAIL
+cd $HOME/p-smaguluri3-0/RL
 
-cd $SLURM_SUBMIT_DIR
 module load anaconda3/2022.05
 conda activate torch
-srun python submit.py tExp.sh
+python submit.py tExp.sh
