@@ -208,7 +208,7 @@ def average_torch_dicts(list_of_dicts):
         average_dict[key] = torch.mean(torch.stack([d[key] for d in list_of_dicts]), axis=0)
     return average_dict
 
-def stats_to_cpu(stats_dict):
+def dict_to_cpu(stats_dict):
     """Cast all torch.tensors in dict to detached cpu tensors."""
     new_dict = dict()
     for k, v in stats_dict.items():
@@ -218,12 +218,26 @@ def stats_to_cpu(stats_dict):
             new_dict[k] = v
     return new_dict
 
-def stats_to_np(stats_dict):
+def dict_to_np(stats_dict):
     """Cast all torch.tensors in dict to numpy arrays."""
     new_dict = dict()
     for k, v in stats_dict.items():
         if isinstance(v, torch.Tensor):
             new_dict[k] = v.detach().cpu().numpy()
+        else:
+            new_dict[k] = v
+        if np.isscalar(new_dict[k]) and not isinstance(new_dict[k], str):
+            new_dict[k] = float(new_dict[k])
+    return new_dict
+
+def dict_to_python(stats_dict):
+    """Cast all torch.tensors in dict to python arrays for json."""
+    new_dict = dict()
+    for k, v in stats_dict.items():
+        if isinstance(v, torch.Tensor):
+            new_dict[k] = v.detach().cpu().numpy().tolist()
+        elif isinstance(v, np.ndarray):
+            new_dict[k] = v.tolist()
         else:
             new_dict[k] = v
         if np.isscalar(new_dict[k]) and not isinstance(new_dict[k], str):
