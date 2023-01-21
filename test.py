@@ -5,7 +5,7 @@ import json
 import argparse
 import RLAlgs
 import RLModels
-import utils
+import core
 import copy
 import os
 
@@ -156,7 +156,7 @@ def mdpTestFed():
     # print("bellman")
     # print(modelBell.q_tab)
 
-    kwArgs = utils.getArgs(eps=epsilon, epLimit=100,
+    kwArgs = core.getArgs(eps=epsilon, epLimit=100,
                            a=alpha, halfAlpha=False, y=discount, convN=convN, convThresh=0.01, convMethod="compare", otherModel=modelBell, logging=False,
                            syncB=syncBackups, syncE=-1, noReset=True)
     print(kwArgs)
@@ -167,7 +167,7 @@ def mdpTestFed():
     out_dict = out[0]
     out_dict["aggs"] = aggs
 
-    # modelF, simsF, backupsF, epsToBackupF, episodesF, avgRF, rListF, diffsF = tuple(utils.rowsToColumnsPython(out))
+    # modelF, simsF, backupsF, epsToBackupF, episodesF, avgRF, rListF, diffsF = tuple(core.rowsToColumnsPython(out))
 
     # print("learning")
     # print(model.q_tab)

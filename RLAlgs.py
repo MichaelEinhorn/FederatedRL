@@ -124,9 +124,9 @@ def TDLearnNStep(env=None, n=1, a=0.1, y=0.6, lam=0.9, eps=0.1, iterN=100000, ep
 
 
 # get the bellman optimal solution. Only works for matrix MDPs
-def QLearningTabularBellman(model=None, env=None, y=0.6, iterN=1000):
+def QLearningTabularBellman(model=None, env=None, gamma=0.6, iterN=1000):
     for i in range(iterN):
-        model.bellman(env=env, y=y)
+        model.bellman(env=env, gamma=gamma)
     return model
 
 
@@ -284,6 +284,7 @@ def QLearning(initState=None,
                 if logging:
                     print("diff " + str(diff))
                     # print(backups)
+
                 if diff < convThresh:
                     returnDict = getKW(model=model, sims=sims, backups=backups, epsToBackup=epsToBackup, episodes=(e+1),
                                        avgRew=avgRew, rewards=rewards[:e + 1], avgRewArr=np.array(avgRewArr), diffs=diffs, comment="converged distance")

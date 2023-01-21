@@ -49,6 +49,7 @@ if True:
                             tprefix = tprefix.replace("f#", "f" + str(fedP))
                             tprefix = tprefix.replace("a#", "a" + str(alpha))
                             tprefix = tprefix.replace("e#", "e" + str(epsilon))
+                            tprefix = tprefix.replace(".", ",")
                             
                             result = subprocess.run(['squeue','--format="%.18i %.9P %j %.2t %.10M %.6D %R"', '-u', 'meinhorn6'], capture_output=True, text=True).stdout
                             strOut = result

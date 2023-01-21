@@ -1,7 +1,7 @@
 import numpy as np
 import gym
 from numpy.random import default_rng
-from utils import softmax
+from core import softmax
 
 
 class RandomMDP:

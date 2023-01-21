@@ -217,8 +217,8 @@ class QLinAprox:
         else:
             return np.argmax(qV)
 
-    def backup(self, state, act, nextS, r, a=0.1, y=0.6):
-        self.w[act] = self.w[act] + a * r * self.feat(state, act, self.NF, self.NA)
+    def backup(self, state, act, nextS, reward, alpha=0.1, gamma=0.6):
+        self.w[act] = self.w[act] + alpha * reward * self.feat(state, act, self.NF, self.NA)
 
     def getW(self):
         return self.w
@@ -235,7 +235,7 @@ class RandomPolicy:
     def policy(self, state, stochOverride=None):
         return self.space.sample()
 
-    def backup(self, state, act, nextS, r, a=0.1, y=0.6):
+    def backup(self, state, act, nextS, reward, alpha=0.1, gamma=0.6):
         return
 
     def getW(self):
