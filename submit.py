@@ -55,7 +55,8 @@ if True:
                             result = subprocess.run(['squeue','--format="%.18i %.9P %j %.2t %.10M %.6D %R"', '-u', 'smaguluri3'], capture_output=True, text=True).stdout
                             strOut = result + strOut
 
-                            if not replaceEx and (os.path.isdir(dirPath + tprefix) or (tprefix in strOut)):
+                            filePath = dirPath + "/" + tprefix + ".json"
+                            if not replaceEx and (os.path.isdir(filePath) or (tprefix in strOut)):
                                 print("skipping " + tprefix)
                                 continue
                                 
