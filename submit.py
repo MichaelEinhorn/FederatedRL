@@ -58,7 +58,7 @@ if True:
                             strOut = result + strOut
 
                             filePath = dirPath + "/" + tprefix + ".json"
-                            if not replaceEx and (os.path.isdir(filePath) or (tprefix in strOut)):
+                            if not replaceEx and (os.path.isfile(filePath) or (tprefix in strOut)):
                                 print("skipping " + tprefix)
                                 continue
                                 
