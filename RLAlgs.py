@@ -12,7 +12,7 @@ import multiprocessing as mp
 # evaluate a model on an environment return mean reward and list of rewards
 
 
-def score(initState=None, iterN=100, env=None, model=None, epLimit=-1, printErr=False, stochOverride=None):
+def score(initState=None, iterN=100, env=None, model=None, epLimit=-1, printErr=False, stochastic=None):
     rewards = np.zeros(iterN)
     for e in range(iterN):
         if initState is None:
@@ -25,7 +25,7 @@ def score(initState=None, iterN=100, env=None, model=None, epLimit=-1, printErr=
         reward = 0
         while not term and (epLimit == -1 or i < epLimit):
             i += 1
-            act = model.policy(state, stochOverride=stochOverride)
+            act = model.policy(state, stochastic=stochastic)
             state, r, term, info = env.step(act)
             reward += r
         if epLimit != -1 and i >= epLimit and printErr:
@@ -35,7 +35,7 @@ def score(initState=None, iterN=100, env=None, model=None, epLimit=-1, printErr=
     return np.mean(rewards), rewards
 
 
-def TDLearnNStep(env=None, n=1, a=0.1, y=0.6, lam=0.9, eps=0.1, iterN=100000, epLimit=-1, trace="replace", seed=None, stoch=False, otherModel=None, convThresh=0.01, logging=False):
+def TDLearnNStep(env=None, n=1, alpha=0.1, gamma=0.6, lam=0.9, epsilon=0.1, iterN=100000, epLimit=-1, trace="replace", seed=None, stoch=False, otherModel=None, convThresh=0.01, logging=False):
     if seed is None:
         rng = default_rng()
     else:
@@ -68,9 +68,9 @@ def TDLearnNStep(env=None, n=1, a=0.1, y=0.6, lam=0.9, eps=0.1, iterN=100000, ep
                 tracePairs.append((state, act))
 
             sims += 1
-            nextS, r, term, info = env.step(act)
+            nextS, reward, term, info = env.step(act)
 
-            if rng.random() < eps:
+            if rng.random() < epsilon:
                 actP = env.action_space.sample()
             else:
                 if stoch:
@@ -79,19 +79,19 @@ def TDLearnNStep(env=None, n=1, a=0.1, y=0.6, lam=0.9, eps=0.1, iterN=100000, ep
                 else:
                     actP = np.argmax(q_tab[nextS])
 
-            g = r + y * q_tab[nextS, actP] - q_tab[state, act]
-            reward += r
+            g = reward + gamma * q_tab[nextS, actP] - q_tab[state, act]
+            reward += reward
             if trace == "accumulate":
                 e_trace[state, act] += 1
             elif trace == "dutch":
-                e_trace[state, act] = (1 - a) * e_trace[state, act] + 1
+                e_trace[state, act] = (1 - alpha) * e_trace[state, act] + 1
             elif trace == "replace":
                 e_trace[state, act] = 1
 
             for sT, aT in tracePairs:
                 backups += 1
-                q_tab[sT, aT] += a * g * e_trace[sT, aT]
-                e_trace[sT, aT] *= y * lam
+                q_tab[sT, aT] += alpha * g * e_trace[sT, aT]
+                e_trace[sT, aT] *= gamma * lam
 
             state = nextS
             act = actP
@@ -116,17 +116,17 @@ def TDLearnNStep(env=None, n=1, a=0.1, y=0.6, lam=0.9, eps=0.1, iterN=100000, ep
                 prev = np.mean(diffsNp[len(diffs) - 2 * 10:len(diffs) - 10])
                 if prev > avgDiff:
                     if logging:
-                        print("half alpha to " + str(a))
-                    a = a / 2
+                        print("half alpha to " + str(alpha))
+                    alpha = alpha / 2
                     lastHyperChange = e
 
     return q_tab, sims, backups
 
 
 # get the bellman optimal solution. Only works for matrix MDPs
-def QLearningTabularBellman(model=None, env=None, y=0.6, iterN=1000):
+def QLearningTabularBellman(model=None, env=None, gamma=0.6, iterN=1000):
     for i in range(iterN):
-        model.bellman(env=env, y=y)
+        model.bellman(env=env, gamma=gamma)
     return model
 
 
@@ -178,7 +178,7 @@ def QLearning(initState=None,
 
     if WeightSharedMem is not None:
         aggW = np.frombuffer(WeightSharedMem.get_obj()
-                             ).reshape(model.getW().shape)
+                             ).reshape(model.getWeight().shape)
 
     # only get state once
     if noReset:
@@ -214,9 +214,9 @@ def QLearning(initState=None,
                 # print(backups)
                 if mpEnd.value:
                     break
-                AggWeightQ.put(model.getW())
+                AggWeightQ.put(model.getWeight())
                 AggWeightQ.join()
-                model.setW(aggW)
+                model.setWeight(aggW)
 
             i += 1
 
@@ -229,9 +229,9 @@ def QLearning(initState=None,
         if syncE != -1 and (e+1) % syncE == 0:
             if mpEnd.value:
                 break
-            AggWeightQ.put(model.getW())
+            AggWeightQ.put(model.getWeight())
             AggWeightQ.join()
-            model.setW(aggW)
+            model.setWeight(aggW)
 
         # convergence testing
         if convN != -1 and (e+1) % convN == 0:
@@ -284,6 +284,7 @@ def QLearning(initState=None,
                 if logging:
                     print("diff " + str(diff))
                     # print(backups)
+
                 if diff < convThresh:
                     returnDict = getKW(model=model, sims=sims, backups=backups, epsToBackup=epsToBackup, episodes=(e+1),
                                        avgRew=avgRew, rewards=rewards[:e + 1], avgRewArr=np.array(avgRewArr), diffs=diffs, comment="converged distance")

@@ -110,7 +110,7 @@ class QTabularFedAvg():
         parr = [None] * self.P
         mpEnd = mp.Value(ctypes.c_bool, False)
         kwargs = QLearningKWArgs
-        kwargs.update(core.getArgs(mpQueue=self.AggWeightQ, returnQ=self.returnQ, aggWmp=self.shared_q_tab_mp, mpEnd=mpEnd))
+        kwargs.update(core.getArgs(AggWeightQ=self.AggWeightQ, returnQ=self.returnQ, WeightSharedMem=self.shared_q_tab_mp, mpEnd=mpEnd))
         for i in range(self.P):
             # gives each thread its own seed
             modelTemp = copy.deepcopy(model)
@@ -203,22 +203,22 @@ class QLinAprox:
         else:
             self.rng = default_rng(seed)
 
-    def policy(self, state, stochOverride=None):
+    def policy(self, state, stochastic=None):
         qV = np.zeros(self.NA)
         for act in range(self.NA):
             qV[act] = np.sum(self.feat(state, act, self.NF, self.NA) * self.w[act])
 
         stoch = self.stoch
-        if stochOverride is not None:
-            stoch = stochOverride
+        if stochastic is not None:
+            stoch = stochastic
         if stoch:
             qV = softmax(qV)
             return self.rng.choice(range(self.NA), 1, p=qV)[0]
         else:
             return np.argmax(qV)
 
-    def backup(self, state, act, nextS, r, a=0.1, y=0.6):
-        self.w[act] = self.w[act] + a * r * self.feat(state, act, self.NF, self.NA)
+    def backup(self, state, act, nextS, reward, alpha=0.1, gamma=0.6):
+        self.w[act] = self.w[act] + alpha * reward * self.feat(state, act, self.NF, self.NA)
 
     def getW(self):
         return self.w
@@ -232,10 +232,10 @@ class RandomPolicy:
         self.space = env.action_space
         self.w = None
 
-    def policy(self, state, stochOverride=None):
+    def policy(self, state, stochastic=None):
         return self.space.sample()
 
-    def backup(self, state, act, nextS, r, a=0.1, y=0.6):
+    def backup(self, state, act, nextS, reward, alpha=0.1, gamma=0.6):
         return
 
     def getW(self):

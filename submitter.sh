@@ -7,7 +7,7 @@
 #SBATCH -qinferno
 #SBATCH -o/storage/home/hcoda1/2/meinhorn6/scratch/logs/Submitter-%j.out
 #SBATCH --mail-user=meinhorn6@gatech.edu
-#SBATCH --mail-type=FAIL
+#SBATCH --mail-type=ALL
 cd $HOME/p-smaguluri3-0/RL
 
 module load anaconda3/2022.05

@@ -5,7 +5,7 @@ import json
 import argparse
 import RLAlgs
 import RLModels
-import utils
+import core
 import copy
 import os
 
@@ -25,7 +25,8 @@ states = 4
 actions = 3
 
 jsonFilePrefix = "mdpv4_"
-dirPath = "~/scratch/RL"
+# dirPath = "~/scratch/RL"
+dirPath = "/storage/home/hcoda1/2/meinhorn6/scratch/RL"
 jsonDict = {}
 
 windows = False
@@ -46,7 +47,7 @@ def benchBell():
     print(envBell.rewardMat)
 
     modelBell = RLModels.QTabular(envBell, stochasticPolicy=True)
-    modelBell = RLAlgs.QLearningTabularBellman(model=modelBell, env=envBell, y=discount, iterN=10000)
+    modelBell = RLAlgs.QLearningTabularBellman(model=modelBell, env=envBell, gamma=discount, iterN=10000)
 
     scoreBell, sList = RLAlgs.score(env=envBell, model=modelBell, epLimit=10000, iterN=1, printErr=False)
 
@@ -77,7 +78,7 @@ def mdpTest():
     model = RLModels.QTabular(env, stochasticPolicy=stochasticPolicy)
     modelBell = RLModels.QTabular(envBell, stochasticPolicy=stochasticPolicy)
 
-    modelBell = RLAlgs.QLearningTabularBellman(model=modelBell, env=envBell, y=discount, iterN=10000)
+    modelBell = RLAlgs.QLearningTabularBellman(model=modelBell, env=envBell, gamma=discount, iterN=10000)
     # print("bellman")
     # print(modelBell.q_tab)
 
@@ -85,6 +86,8 @@ def mdpTest():
                                                                           alpha=alpha, halfAlpha=False, gamma=discount, convN=convN, convThresh=0.01,
                                                                           convMethod="compare", otherModel=modelBell,
                                                                           logging=False, noReset=True)
+    model = out_dict["model"]
+    del out_dict["model"]
 
     # print("learning")
     # print(model.q_tab)
@@ -96,8 +99,8 @@ def mdpTest():
     print("episodes " + str(out_dict["episodes"]))
     print("avg train reward " + str(out_dict["score"]))
 
-    score, sList = RLAlgs.score(model=model, env=env, epLimit=10000, iterN=1, printErr=False, stochOverride=False)
-    scoreStoch, sListStoch = RLAlgs.score(model=model, env=env, epLimit=10000, iterN=1, printErr=False, stochOverride=True)
+    score, sList = RLAlgs.score(model=model, env=env, epLimit=10000, iterN=1, printErr=False, stochastic=False)
+    scoreStoch, sListStoch = RLAlgs.score(model=model, env=env, epLimit=10000, iterN=1, printErr=False, stochastic=True)
 
     out_dict["endScore"] = score
     out_dict["endScoreStoch"] = scoreStoch
@@ -105,18 +108,19 @@ def mdpTest():
     print("score " + str((score, scoreStoch)))
 
     scoreBell, sListBell = RLAlgs.score(model=modelBell, env=env, epLimit=10000, iterN=1, printErr=False,
-                                        stochOverride=False)
+                                        stochastic=False)
     scoreStochBell, sListStochBell = RLAlgs.score(model=modelBell, env=env, epLimit=10000, iterN=1, printErr=False,
-                                                  stochOverride=True)
+                                                  stochastic=True)
 
     out_dict["endScoreBell"] = scoreBell
     out_dict["endScoreStochBell"] = scoreStochBell
 
     scoreRand, _ = RLAlgs.score(model=RLModels.RandomPolicy(env), env=env, epLimit=10000, iterN=1, printErr=False,
-                             stochOverride=False)
+                             stochastic=False)
 
     out_dict["endScoreRand"] = scoreRand
 
+    out_dict = core.dict_to_python(out_dict)
     jsonDict[jsonDictKey] = out_dict
     with open(jsonFileSplitName, 'w') as f:
         json.dump(jsonDict, f)
@@ -152,22 +156,24 @@ def mdpTestFed():
     model = RLModels.QTabular(env, stochasticPolicy=stochasticPolicy)
     modelBell = RLModels.QTabular(envBell, stochasticPolicy=stochasticPolicy)
 
-    modelBell = RLAlgs.QLearningTabularBellman(model=modelBell, env=envBell, y=discount, iterN=10000)
+    modelBell = RLAlgs.QLearningTabularBellman(model=modelBell, env=envBell, gamma=discount, iterN=10000)
     # print("bellman")
     # print(modelBell.q_tab)
 
-    kwArgs = utils.getArgs(eps=epsilon, epLimit=100,
-                           a=alpha, halfAlpha=False, y=discount, convN=convN, convThresh=0.01, convMethod="compare", otherModel=modelBell, logging=False,
+    kwArgs = core.getArgs(epsilon=epsilon, epLimit=100,
+                           alpha=alpha, halfAlpha=False, gamma=discount, convN=convN, convThresh=0.01, convMethod="compare", otherModel=modelBell, logging=False,
                            syncB=syncBackups, syncE=-1, noReset=True)
     print(kwArgs)
 
     federatedModel = RLModels.QTabularFedAvg(model.getWeight().shape, stochasticPolicy=True, p=fedP)
 
     out, aggs = federatedModel.start(RLAlgs.QLearning, QLearningKWArgs=kwArgs, env=env, model=model)
+    model = out[0]["model"]
     out_dict = out[0]
+    del out_dict["model"]
     out_dict["aggs"] = aggs
 
-    # modelF, simsF, backupsF, epsToBackupF, episodesF, avgRF, rListF, diffsF = tuple(utils.rowsToColumnsPython(out))
+    # modelF, simsF, backupsF, epsToBackupF, episodesF, avgRF, rListF, diffsF = tuple(core.rowsToColumnsPython(out))
 
     # print("learning")
     # print(model.q_tab)
@@ -179,25 +185,26 @@ def mdpTestFed():
     print("episodes " + str(out_dict["episodes"]))
     print("avg train reward " + str(out_dict["score"]))
 
-    score, sList = RLAlgs.score(model=model, env=env, epLimit=10000, iterN=1, printErr=False, stochOverride=False)
+    score, sList = RLAlgs.score(model=model, env=env, epLimit=10000, iterN=1, printErr=False, stochastic=False)
     scoreStoch, sListStoch = RLAlgs.score(model=model, env=env, epLimit=10000, iterN=1, printErr=False,
-                                          stochOverride=True)
+                                          stochastic=True)
 
     print("score " + str((score, scoreStoch)))
     out_dict["endScore"] = score
     out_dict["endScoreStoch"] = scoreStoch
 
-    scoreBell, sListBell = RLAlgs.score(model=modelBell, env=env, epLimit=10000, iterN=1, printErr=False, stochOverride=False)
+    scoreBell, sListBell = RLAlgs.score(model=modelBell, env=env, epLimit=10000, iterN=1, printErr=False, stochastic=False)
     scoreStochBell, sListStochBell = RLAlgs.score(model=modelBell, env=env, epLimit=10000, iterN=1, printErr=False,
-                                          stochOverride=True)
+                                          stochastic=True)
 
     out_dict["endScoreBell"] = scoreBell
     out_dict["endScoreStochBell"] = scoreStochBell
 
-    scoreRand, _ = RLAlgs.score(model=RLModels.RandomPolicy(env), env=env, epLimit=10000, iterN=1, printErr=False, stochOverride=False)
+    scoreRand, _ = RLAlgs.score(model=RLModels.RandomPolicy(env), env=env, epLimit=10000, iterN=1, printErr=False, stochastic=False)
 
     out_dict["endScoreRand"] = scoreRand
 
+    out_dict = core.dict_to_python(out_dict)
     print(out_dict)
     jsonDict[jsonDictKey] = out_dict
     with open(jsonFileSplitName, 'w') as f:
@@ -223,12 +230,12 @@ def mdpTestTD():
     envBell = CustomEnvs.RandomMDP(states, actions, seed=envSeed)
     modelBell = RLModels.QTabular(envBell, stochasticPolicy=True)
 
-    modelBell = RLAlgs.QLearningTabularBellman(model=modelBell, env=envBell, y=discount, iterN=1000)
+    modelBell = RLAlgs.QLearningTabularBellman(model=modelBell, env=envBell, gamma=discount, iterN=1000)
     print("bellman")
     print(modelBell.q_tab)
 
     envTD = CustomEnvs.RandomMDP(states, actions, seed=envSeed)
-    q_tabTD, sims, backups = RLAlgs.TDLearnNStep(env=envTD, n=10, a=0.1, y=discount, lam=0.9, eps=0, iterN=10000,
+    q_tabTD, sims, backups = RLAlgs.TDLearnNStep(env=envTD, n=10, alpha=0.1, gamma=discount, lam=0.9, epsilon=0, iterN=10000,
                                                  epLimit=100, trace="accumulate",
                                                  stoch=True, logging=True, otherModel=modelBell)
     print(q_tabTD)

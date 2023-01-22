@@ -28,7 +28,8 @@ if True:
             
         i = 0
 
-        dirPath = "~/scratch/RL"
+        # dirPath = "~/scratch/RL"
+        dirPath = "/storage/home/hcoda1/2/meinhorn6/scratch/RL"
         
         # runs n trials at dataset size 1/n, but with a max of numTrials and a min of numTrialsRep
         repeatTrial = True
@@ -49,6 +50,7 @@ if True:
                             tprefix = tprefix.replace("f#", "f" + str(fedP))
                             tprefix = tprefix.replace("a#", "a" + str(alpha))
                             tprefix = tprefix.replace("e#", "e" + str(epsilon))
+                            tprefix = tprefix.replace(".", "")
                             
                             result = subprocess.run(['squeue','--format="%.18i %.9P %j %.2t %.10M %.6D %R"', '-u', 'meinhorn6'], capture_output=True, text=True).stdout
                             strOut = result
