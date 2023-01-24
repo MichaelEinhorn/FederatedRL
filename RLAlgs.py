@@ -337,7 +337,7 @@ def QLearning(initState=None,
                         else:
                             returnComment = "constant distance"
                             returnDict = getKW(model=model, sims=sims, backups=backups, epsToBackup=epsToBackup, episodes=(e+1),
-                                               score=avgRew, rewards=rewards[:e + 1], scoresArr=np.array(avgRewArr), diffs=diffs, comment=returnComment)
+                                       avgRew=avgRew, rewards=rewards[:e + 1], avgRewArr=np.array(avgRewArr), diffs=diffs, comment=returnComment)
                             if returnQ is not None:
                                 returnQ.put(returnDict)
                             return returnDict

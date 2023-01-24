@@ -102,7 +102,7 @@ def mdpTest():
 
     print("simulation steps " + str(out_dict["sims"]))
     print("episodes " + str(out_dict["episodes"]))
-    print("avg train reward " + str(out_dict["score"]))
+    print("avg train reward " + str(out_dict["avgRew"]))
 
     score, sList = RLAlgs.score(model=model, env=env, epLimit=10000, iterN=1, printErr=False, stochastic=False)
     scoreStoch, sListStoch = RLAlgs.score(model=model, env=env, epLimit=10000, iterN=1, printErr=False, stochastic=True)
@@ -188,7 +188,7 @@ def mdpTestFed():
 
     print("simulation steps " + str(out_dict["sims"]))
     print("episodes " + str(out_dict["episodes"]))
-    print("avg train reward " + str(out_dict["score"]))
+    print("avg train reward " + str(out_dict["avgRew"]))
 
     score, sList = RLAlgs.score(model=model, env=env, epLimit=10000, iterN=1, printErr=False, stochastic=False)
     scoreStoch, sListStoch = RLAlgs.score(model=model, env=env, epLimit=10000, iterN=1, printErr=False,

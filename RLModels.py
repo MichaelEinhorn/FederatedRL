@@ -121,6 +121,7 @@ class QTabularFedAvg():
             kwargsTemp.update(kwargs)
 
             parr[i] = mp.Process(target=QLearnF, kwargs=kwargsTemp)
+            parr[i].daemon = True
             parr[i].start()
 
         # starts aggregate thread which averages weights
