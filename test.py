@@ -8,6 +8,7 @@ import RLModels
 import core
 import copy
 import os
+import time
 
 import CustomEnvs
 
@@ -20,6 +21,10 @@ syncBackups = 100 * convN
 stochasticPolicy = True
 envSeed = 3701
 trial = 0
+
+startTime = 0
+totalTime = 6 * 60 * 60
+totalTime -= 600
 
 states = 4
 actions = 3
@@ -85,7 +90,7 @@ def mdpTest():
     out_dict = RLAlgs.QLearning(env=env, model=model, epsilon=epsilon, epLimit=100,
                                                                           alpha=alpha, halfAlpha=False, gamma=discount, convN=convN, convThresh=0.01,
                                                                           convMethod="compare", otherModel=modelBell,
-                                                                          logging=False, noReset=True)
+                                                                          logging=False, noReset=True, timeOut=(startTime, totalTime))
     model = out_dict["model"]
     del out_dict["model"]
 
@@ -162,7 +167,7 @@ def mdpTestFed():
 
     kwArgs = core.getArgs(epsilon=epsilon, epLimit=100,
                            alpha=alpha, halfAlpha=False, gamma=discount, convN=convN, convThresh=0.01, convMethod="compare", otherModel=modelBell, logging=False,
-                           syncB=syncBackups, syncE=-1, noReset=True)
+                           syncB=syncBackups, syncE=-1, noReset=True, timeOut=(startTime, totalTime))
     print(kwArgs)
 
     federatedModel = RLModels.QTabularFedAvg(model.getWeight().shape, stochasticPolicy=True, p=fedP)
@@ -319,6 +324,8 @@ if __name__ == '__main__':
     convN = args.convN
     discount = args.discount
     stochasticPolicy = args.stochasticPolicy
+
+    startTime = time.time()
 
     envSeed = envSeed + trial
 
