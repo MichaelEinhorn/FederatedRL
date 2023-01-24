@@ -97,6 +97,6 @@ if True:
                                 print(strOut)
                                 nlines = strOut.count('\n')
                                 print(nlines)
-                                sleep(900)
+                                sleep(90)
                             sleep(1)
                             i += 1

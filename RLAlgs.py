@@ -152,11 +152,11 @@ def QLearning(initState=None,
               otherModel=None,
               # mp Queues
               AggWeightQ=None,
+              distWeightQ = None,
               returnQ=None,
               # only use one or the other
               syncB=-1,  # sync every syncB backups
               syncE=-1,  # sync every syncE episodes
-              WeightSharedMem=None,  # shared memory for synched weights
               mpEnd=None, # flag to exit training for all processes after any process returns. Checked before a sync weights occurs
               seed=None,
               noReset=False,  # reset the environment at the start of each episode
@@ -178,20 +178,16 @@ def QLearning(initState=None,
     lastHyperChange = -1
     epsToBackup = []
 
-    if WeightSharedMem is not None:
-        aggW = np.frombuffer(WeightSharedMem.get_obj()
-                             ).reshape(model.getWeight().shape)
-
     # only get state once
     if noReset:
         state = env.reset()
 
     # not finished training if returnComment is None
     returnComment = None
-    e = -1
+    curr_e = -1
     # for e in range(iterN):
     while True:
-        e += 1
+        curr_e += 1
 
         if not noReset:
             if initState is None:
@@ -203,9 +199,11 @@ def QLearning(initState=None,
         epsToBackup.append(backups)
 
         term = False
-        i = 0
+        curr_s = -1
         reward = 0
-        while not term and (epLimit == -1 or i < epLimit):
+        while not term and (epLimit == -1 or curr_s < epLimit):
+            curr_s += 1
+
             if rng.random() < epsilon:
                 act = env.action_space.sample()
             else:
@@ -219,46 +217,81 @@ def QLearning(initState=None,
             state = nextS
 
             if syncB != -1 and backups % syncB == 0:
-                # print(backups)
+                # dont sync after another thread terminates
+                if returnComment is None:
+                    if logging:
+                        print("Q syncing send", flush=True)
+                    AggWeightQ.put(model.getWeight())
+                    # AggWeightQ.join()
+                    aggW = None
+                    while not mpEnd.value and aggW is None:
+                        try:
+                            if logging:
+                                print("Q syncing wait", flush=True)
+                            aggW = distWeightQ.get(timeout=5)
+                            if logging:
+                                print("Q syncing recieved", flush=True)
+                            model.setWeight(aggW)
+                        except Exception as timeEx:
+                            print(timeEx, flush=True)
+                
                 if mpEnd.value:
+                    if logging:
+                        print("mpEnd", flush=True)
                     returnComment = "mpEnd"
-                    break
-                AggWeightQ.put(model.getWeight())
-                AggWeightQ.join()
-                model.setWeight(aggW)
+                    break # inner loop
 
-            i += 1
-
-        rewards[e] = reward
+        rewards[curr_e] = reward
 
         # sync
         if syncB != -1 and backups % syncB == 0:
             if mpEnd.value:
                 returnComment = "mpEnd"
-        if syncE != -1 and (e+1) % syncE == 0:
+
+        if syncE != -1 and (curr_e+1) % syncE == 0:
+            if returnComment is None:
+                if logging:
+                    print("syncing send", flush=True)
+                AggWeightQ.put(model.getWeight())
+                # AggWeightQ.join()
+                aggW = None
+                while not mpEnd.value and aggW is None:
+                    try:
+                        if logging:
+                            print("Q syncing wait", flush=True)
+                        aggW = distWeightQ.get(timeout=5)
+                        if logging:
+                            print("Q syncing recieved", flush=True)
+                        model.setWeight(aggW)
+                    except Exception as timeEx:
+                        print(timeEx, flush=True)
+                
             if mpEnd.value:
+                if logging:
+                    print("mpEnd", flush=True)
                 returnComment = "mpEnd"
-            AggWeightQ.put(model.getWeight())
-            AggWeightQ.join()
-            model.setWeight(aggW)
 
         if timeOut is not None:
             if time.time() - timeOut[0] > timeOut[1]:
+                if logging:
+                    print("timeout ", time.time(), flush=True)
                 returnComment = "timeout"
 
-        if e == iterN - 1:
+        if curr_e == iterN - 1:
+            if logging:
+                print("max episodes", flush=True)
             returnComment = "max episodes"
 
         # convergence testing, always terminate if there is a returnComment
-        if (convN != -1 and (e+1) % convN == 0) or returnComment is not None:
+        if (convN != -1 and (curr_e+1) % convN == 0) or returnComment is not None:
             if convMethod == "score":
-                avgRew = np.mean(rewards[e+1 - convN:e + 1])
+                avgRew = np.mean(rewards[curr_e+1 - convN:curr_e + 1])
                 avgRewArr.append(avgRew)
                 # tests without exploration or updating during the episode
                 prevTestScore = avgTestScore
                 avgTestScore, _ = score(iterN=20, model=model, env=env, epLimit=1000)
                 if logging:
-                    print("episode " + str(e) + " r " + str(avgTestScore))
+                    print("episode " + str(curr_e) + " r " + str(avgTestScore), flush=True)
                 avgTestScoreArr.append(avgTestScore)
                 diff = abs(avgTestScore - prevTestScore)
                 diffs.append(diff)
@@ -267,19 +300,19 @@ def QLearning(initState=None,
                     returnComment = "constant test score"
 
                 if returnComment is not None:
-                    returnDict = getKW(model=model, sims=sims, backups=backups, epsToBackup=epsToBackup, episodes=(e+1), avgTestScore=avgTestScore, avgTestScoreArr=np.array(avgTestScoreArr),
-                                       avgRew=avgRew, rewards=rewards[:e + 1], avgRewArr=np.array(avgRewArr), diffs=diffs, comment=returnComment)
+                    returnDict = getKW(model=model, sims=sims, backups=backups, epsToBackup=epsToBackup, episodes=(curr_e+1), avgTestScore=avgTestScore, avgTestScoreArr=np.array(avgTestScoreArr),
+                                       avgRew=avgRew, rewards=rewards[:curr_e + 1], avgRewArr=np.array(avgRewArr), diffs=diffs, comment=returnComment)
                     if returnQ is not None:
                         returnQ.put(returnDict)
                     return returnDict
 
             elif convMethod == "trainR":
-                if e >= 2 * convN:
+                if curr_e >= 2 * convN:
                     # converges if average reward of convN episodes is the same as the previous convN episodes
-                    avgRew = np.mean(rewards[e+1 - convN:e + 1])
+                    avgRew = np.mean(rewards[curr_e+1 - convN:curr_e + 1])
                     if logging:
-                        print("episode " + str(e) + " r " + str(avgRew))
-                    prevAvgRew = np.mean(rewards[e-2*convN:e-convN])
+                        print("episode " + str(curr_e) + " r " + str(avgRew), flush=True)
+                    prevAvgRew = np.mean(rewards[curr_e-2*convN:curr_e-convN])
                     avgRewArr.append(avgRew)
                     diff = abs(avgRew - prevAvgRew)
                     diffs.append(diff)
@@ -293,8 +326,8 @@ def QLearning(initState=None,
                         #     print("training no eps")
                         #     eps = 0
                         # else:
-                        returnDict = getKW(model=model, sims=sims, backups=backups, epsToBackup=epsToBackup, episodes=(e+1),
-                                       avgRew=avgRew, rewards=rewards[:e + 1], avgRewArr=np.array(avgRewArr), diffs=diffs, comment=returnComment)
+                        returnDict = getKW(model=model, sims=sims, backups=backups, epsToBackup=epsToBackup, episodes=(curr_e+1),
+                                       avgRew=avgRew, rewards=rewards[:curr_e + 1], avgRewArr=np.array(avgRewArr), diffs=diffs, comment=returnComment)
                         if returnQ is not None:
                             returnQ.put(returnDict)
                         return returnDict
@@ -302,25 +335,25 @@ def QLearning(initState=None,
             elif convMethod == "compare":
                 diff = model.diff(otherModel)
                 diffs.append(diff)
-                avgRew = np.mean(rewards[e+1 - convN:e + 1])
+                avgRew = np.mean(rewards[curr_e+1 - convN:curr_e + 1])
                 avgRewArr.append(avgRew)
 
                 if logging:
-                    print("diff " + str(diff))
+                    print("diff " + str(diff), flush=True)
                     # print(backups)
 
                 if diff < convThresh:
                     returnComment = "converged distance"
                 
                 if returnComment is not None:
-                    returnDict = getKW(model=model, sims=sims, backups=backups, epsToBackup=epsToBackup, episodes=(e+1),
-                                       avgRew=avgRew, rewards=rewards[:e + 1], avgRewArr=np.array(avgRewArr), diffs=diffs, comment=returnComment)
+                    returnDict = getKW(model=model, sims=sims, backups=backups, epsToBackup=epsToBackup, episodes=(curr_e+1),
+                                       avgRew=avgRew, rewards=rewards[:curr_e + 1], avgRewArr=np.array(avgRewArr), diffs=diffs, comment=returnComment)
                     if returnQ is not None:
                         returnQ.put(returnDict)
                     return returnDict
 
-                if len(diffs) > 21 and (e+1) % (convN * 10) == 0 and \
-                        (e - lastHyperChange > 3*(convN * 10) or lastHyperChange == -1):
+                if len(diffs) > 21 and (curr_e+1) % (convN * 10) == 0 and \
+                        (curr_e - lastHyperChange > 3*(convN * 10) or lastHyperChange == -1):
 
                     diffsNp = np.array(diffs)
                     avgDiff = np.mean(diffsNp[-10:])
@@ -332,12 +365,12 @@ def QLearning(initState=None,
                         if halfAlpha:
                             alpha = alpha / 2
                             if logging:
-                                print("half alpha to " + str(alpha))
-                            lastHyperChange = e
+                                print("half alpha to " + str(alpha), flush=True)
+                            lastHyperChange = curr_e
                         else:
                             returnComment = "constant distance"
-                            returnDict = getKW(model=model, sims=sims, backups=backups, epsToBackup=epsToBackup, episodes=(e+1),
-                                       avgRew=avgRew, rewards=rewards[:e + 1], avgRewArr=np.array(avgRewArr), diffs=diffs, comment=returnComment)
+                            returnDict = getKW(model=model, sims=sims, backups=backups, epsToBackup=epsToBackup, episodes=(curr_e+1),
+                                       avgRew=avgRew, rewards=rewards[:curr_e + 1], avgRewArr=np.array(avgRewArr), diffs=diffs, comment=returnComment)
                             if returnQ is not None:
                                 returnQ.put(returnDict)
                             return returnDict

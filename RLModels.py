@@ -79,10 +79,12 @@ class QTabular:
 class QTabularFedAvg():
     def __init__(self, shape, stochasticPolicy=False, p=10, seed=None, qV=None):
         self.P = p
-        self.AggWeightQ = mp.JoinableQueue()
+        self.AggWeightQ = mp.Queue()
+        self.distWeightQ = mp.Queue()
         self.returnQ = mp.Queue()
         self.aggs = 0
         self.shape = shape
+        self.logging = False
         if qV is None:
             self.q_tab = np.zeros(shape)
         else:
@@ -91,9 +93,6 @@ class QTabularFedAvg():
         tsize = 1
         for s in shape:
             tsize *= s
-        self.shared_q_tab_mp = mp.Array(ctypes.c_double, tsize)
-        self.shared_q_tab_np = np.frombuffer(self.shared_q_tab_mp.get_obj()).reshape(shape)
-        self.shared_q_tab_np[:] = qV
 
         self.stoch = stochasticPolicy
 
@@ -102,15 +101,15 @@ class QTabularFedAvg():
         else:
             self.rng = default_rng(seed)
 
-        self.runAgg = False
-        self.done = False
 
     def start(self, QLearnF=None, QLearningKWArgs=None, model=None, env=None):
-        self.done = False
         parr = [None] * self.P
         mpEnd = mp.Value(ctypes.c_bool, False)
         kwargs = QLearningKWArgs
-        kwargs.update(core.getArgs(AggWeightQ=self.AggWeightQ, returnQ=self.returnQ, WeightSharedMem=self.shared_q_tab_mp, mpEnd=mpEnd))
+        kwargs.update(core.getArgs(AggWeightQ=self.AggWeightQ, returnQ=self.returnQ, distWeightQ=self.distWeightQ, mpEnd=mpEnd))
+
+        self.logging = kwargs["logging"]
+
         for i in range(self.P):
             # gives each thread its own seed
             modelTemp = copy.deepcopy(model)
@@ -123,11 +122,13 @@ class QTabularFedAvg():
             parr[i] = mp.Process(target=QLearnF, kwargs=kwargsTemp)
             parr[i].daemon = True
             parr[i].start()
+            print(f"started thread {i}", flush=True)
 
         # starts aggregate thread which averages weights
-        aggThread = threading.Thread(target=self.aggregate, args=(True,))
+        aggThread = threading.Thread(target=self.aggregate)
         aggThread.daemon = True
         aggThread.start()
+        print(f"started thread agg", flush=True)
 
         out = [self.returnQ.get()]
         # print(out)
@@ -135,24 +136,30 @@ class QTabularFedAvg():
         self.AggWeightQ.put(None)
         mpEnd.value = True
 
+        print("0 thread returned", flush=True)
+
         for i in range(1, self.P):
             out.append(self.returnQ.get())
+            print(f"{i} thread returned", flush=True)
             # print(out[i])
 
-        self.done = True
 
         return out, self.aggs
 
     # averages weights sent to queue and updates shared weights
-    def aggregate(self, loop=False):
+    def aggregate(self):
         self.aggs = 0
         while True:
             arr = []
             for i in range(self.P):
                 arr.append(self.AggWeightQ.get())
+                if self.logging:
+                    print("Agg recieved", i, flush=True)
                 if arr[i] is None:
+                    print("recieved none in sync", flush=True)
                     break
             if arr[i] is None:
+                print("recieved none in sync", flush=True)
                 break
             # locked
             # print("aggregating")
@@ -161,20 +168,25 @@ class QTabularFedAvg():
             for model in arr:
                 self.q_tab += model
             self.q_tab /= len(arr)
-            self.shared_q_tab_np[:] = self.q_tab
-            # end
+
             for i in range(self.P):
-                self.AggWeightQ.task_done()
-            if not loop:
-                break
+                q_tab_temp = copy.deepcopy(self.q_tab)
+                
+                self.distWeightQ.put(q_tab_temp)
+                if self.logging:
+                    print("Agg send", i, flush=True)
+            
+            # end
+            # for i in range(self.P):
+            #     self.AggWeightQ.task_done()
 
         # prevents process hanging on join
-        while not self.done:
-            try:
-                temp = self.AggWeightQ.get(timeout=1)
-                self.AggWeightQ.task_done()
-            except:
-                temp = None
+        # while not self.done:
+        #     try:
+        #         temp = self.AggWeightQ.get(timeout=1)
+        #         self.AggWeightQ.task_done()
+        #     except:
+        #         temp = None
 
 
 def cartPoleFeature(state, action, NF, NA):

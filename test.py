@@ -23,7 +23,7 @@ envSeed = 3701
 trial = 0
 
 startTime = 0
-totalTime = 6 * 60 * 60
+totalTime = 3 * 60 * 60
 totalTime -= 600
 
 states = 4
