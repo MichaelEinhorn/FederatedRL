@@ -42,9 +42,9 @@ if True:
 
                             for alpha in [1, 0.5, 0.2, 0.1, 0.01]:
                                 
-                                alpha = alpha * fedP
-                                if alpha >= 1:
-                                    continue
+                                # alpha = alpha * fedP
+                                # if alpha >= 1:
+                                #     continue
                                     
                                 tprefix = prefix.replace("t#", "t" + str(trial))
                                 tprefix = tprefix.replace("sb#", "sb" + str(syncBackups))
