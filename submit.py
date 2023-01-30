@@ -37,7 +37,7 @@ if True:
         numTrialsRep = 4
 
         for trial in range(3):
-            for epsilon in [1]:
+            for epsilon in [0, 1]:
                 for fedP in [1, 2, 4, 8, 16]:
                     for syncBackups in [10000, 1000, 100, 10, 1]:
                         if fedP == 1:

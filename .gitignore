@@ -120,3 +120,4 @@ dmypy.json
 *.bat
 *.json
 notes.txt
+autoExp.sh
