@@ -30,13 +30,8 @@ if True:
 
         # dirPath = "~/scratch/RL"
         dirPath = "/storage/home/hcoda1/2/meinhorn6/scratch/RL"
-        
-        # runs n trials at dataset size 1/n, but with a max of numTrials and a min of numTrialsRep
-        repeatTrial = True
-        numTrials = 16
-        numTrialsRep = 4
 
-        for trial in range(3):
+        for trial in [0, 2]:
             for epsilon in [0, 1]:
                 for fedP in [1, 2, 4, 8, 16]:
                     for syncBackups in [10000, 1000, 100, 10, 1]:
