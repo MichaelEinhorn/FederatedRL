@@ -33,7 +33,7 @@ if True:
 
         # retry on failure
         for _ in range(2):
-            for trial in [0, 2]:
+            for trial in [0, 1, 2]:
                 for epsilon in [0, 1]:
                     for fedP in [1, 2, 4, 8, 16]:
                         for syncBackups in [10000, 1000, 100, 10, 1]:

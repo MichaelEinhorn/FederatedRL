@@ -327,7 +327,7 @@ if __name__ == '__main__':
 
     startTime = time.time()
 
-    envSeed = envSeed + trial
+    # envSeed = envSeed + trial
 
     if fedP == 1:
         mdpTest()
