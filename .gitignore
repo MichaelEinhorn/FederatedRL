@@ -121,3 +121,4 @@ dmypy.json
 *.json
 notes.txt
 autoExp.sh
+*.csv
