@@ -1,6 +1,8 @@
 import os, sys, json
 import numpy as np
 
+prefix = "mdpvK"
+
 def makeCSV(jsonDictTemp):
     csvList = []
     labels = ["convN", "alpha", "discount", "epsilon", "fedP", "syncBackups", "stochasticPolicy", "envSeed", "trial"]
@@ -24,7 +26,7 @@ def makeCSV(jsonDictTemp):
         line.append(value["backups"])
         csvList.append(line)
 
-    np.savetxt("mdpv4.csv", csvList, delimiter=",", fmt="%s")
+    np.savetxt(prefix + ".csv", csvList, delimiter=",", fmt="%s")
 
 if __name__ == "__main__":
     dirPath = sys.argv[1]
@@ -34,7 +36,7 @@ if __name__ == "__main__":
     jsonDict = {}
 
     for filename in fileList:
-        if filename.endswith(".json"):
+        if filename.startswith(prefix) and filename.endswith(".json"):
             with open(dirPath + "/" + filename, 'r') as file:
                 data = json.load(file)
                 jsonDict.update(data)

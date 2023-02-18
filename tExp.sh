@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -Jp#
 #SBATCH -Agts-smaguluri3
-#SBATCH -N1 -nf#    # Number of nodes and cores per node required
+#SBATCH -N1 -nn#    # Number of nodes and cores per node required
 #SBATCH --mem-per-cpu=1G            # Memory per core
 #SBATCH -t3:00:00             		
 #SBATCH -qembers

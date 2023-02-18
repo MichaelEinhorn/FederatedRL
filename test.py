@@ -29,7 +29,7 @@ totalTime -= 600
 states = 4
 actions = 3
 
-jsonFilePrefix = "mdpv4_"
+jsonFilePrefix = ""
 # dirPath = "~/scratch/RL"
 dirPath = "/storage/home/hcoda1/2/meinhorn6/scratch/RL"
 jsonDict = {}
@@ -324,6 +324,10 @@ if __name__ == '__main__':
     convN = args.convN
     discount = args.discount
     stochasticPolicy = args.stochasticPolicy
+
+    # dont exit early for large K
+    if convN == -1:
+        convN = max(convN, syncBackups/100)
 
     startTime = time.time()
 
