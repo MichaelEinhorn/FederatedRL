@@ -325,10 +325,6 @@ if __name__ == '__main__':
     discount = args.discount
     stochasticPolicy = args.stochasticPolicy
 
-    # dont exit early for large K
-    if convN == -1:
-        convN = max(convN, syncBackups/100)
-
     startTime = time.time()
 
     # envSeed = envSeed + trial

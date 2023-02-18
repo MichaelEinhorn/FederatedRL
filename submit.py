@@ -31,11 +31,15 @@ if True:
         # dirPath = "~/scratch/RL"
         dirPath = "/storage/home/hcoda1/2/meinhorn6/scratch/RL"
 
-        fedPList = [1, 2, 4, 8, 16]
-        alphaList = [1, 0.5, 0.2, 0.1, 0.01]
-        epsilonList = [0, 1]
-        syncBackupsList = [10000, 1000, 100, 10, 1]
-        scaleAlphaList = [False, True]
+        # fedPList = [1, 2, 4, 8, 16]
+        fedPList = [256]
+        # alphaList = [1, 0.5, 0.2, 0.1, 0.01]
+        alphaList = [0.1 * q for q in range(1, 7)]
+        epsilonList = [1]
+        # syncBackupsList = [10000, 1000, 100, 10, 1]
+        syncBackupsList = [1000 * q for q in range(1, 10)]
+        # scaleAlphaList = [False, True]
+        scaleAlphaList = [False]
 
         # retry on failure
         for _ in range(2):
@@ -98,7 +102,7 @@ if True:
                                     nlines = strOut.count('\n')
                                     print(nlines)
 
-                                    while nlines > 40:
+                                    while nlines > 50:
                                         result = subprocess.run(['squeue','--format="%.18i %.9P %j %.2t %.10M %.6D %R"', '-u', 'meinhorn6'], capture_output=True, text=True).stdout
                                         strOut = result
                                         result = subprocess.run(['squeue','--format="%.18i %.9P %j %.2t %.10M %.6D %R"', '-u', 'smaguluri3'], capture_output=True, text=True).stdout
