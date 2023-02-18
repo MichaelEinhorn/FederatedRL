@@ -44,5 +44,5 @@ if __name__ == "__main__":
     with open(filePath, 'w') as file:
         json.dump(jsonDict, file, indent=4)
 
-    makeCSV(jsonDict)
+    # makeCSV(jsonDict)
 
