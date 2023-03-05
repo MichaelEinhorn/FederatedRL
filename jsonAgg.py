@@ -1,7 +1,6 @@
 import os, sys, json
-import numpy as np
 
-prefix = "mdpvK"
+# prefix = "mdpvK"
 
 def makeCSV(jsonDictTemp):
     csvList = []
@@ -11,6 +10,8 @@ def makeCSV(jsonDictTemp):
     summaryKeys = ['finalDiff', "threshEp", "threshBack"]
 
     csvList.append(labels + itemKeys + summaryKeys)
+
+    import numpy as np
 
     for key, value in jsonDictTemp.items():
         line = key[1:-1].split(", ")
@@ -30,7 +31,7 @@ def makeCSV(jsonDictTemp):
 
 if __name__ == "__main__":
     dirPath = sys.argv[1]
-    filePath = sys.argv[2]
+    prefix = sys.argv[2]
     fileList = os.listdir(dirPath)
 
     jsonDict = {}
@@ -41,7 +42,7 @@ if __name__ == "__main__":
                 data = json.load(file)
                 jsonDict.update(data)
 
-    with open(filePath, 'w') as file:
+    with open(prefix + ".json", 'w') as file:
         json.dump(jsonDict, file, indent=4)
 
     # makeCSV(jsonDict)

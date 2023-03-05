@@ -37,7 +37,7 @@ if True:
         alphaList = [0.1 * q for q in range(1, 7)]
         epsilonList = [1]
         # syncBackupsList = [10000, 1000, 100, 10, 1]
-        syncBackupsList = [1000 * q for q in range(1, 10)]
+        syncBackupsList = [1 * q for q in range(1, 11)]
         # scaleAlphaList = [False, True]
         scaleAlphaList = [False]
 
