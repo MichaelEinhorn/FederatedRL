@@ -82,6 +82,14 @@ def stack_dicts_list(dicts):
         results[k] = [d[k] for d in dicts]
     return results
 
+def update_dict_add(d1, d2):
+    for k, v in d2.items():
+        if k in d1:
+            d1[k] += v
+        else:
+            d1[k] = v
+    # return d1
+
 
 def add_suffix(input_dict, suffix):
     """Add suffix to dict keys."""
@@ -101,8 +109,8 @@ def logprobs_from_logits(logits, labels):
     """
     See: https://github.com/pytorch/pytorch/issues/563#issuecomment-330103591
     """
-    logp = F.log_softmax(logits, dim=2)
-    logpy = torch.gather(logp, 2, labels.unsqueeze(2)).squeeze(-1)
+    logp = F.log_softmax(logits, dim=-1)
+    logpy = torch.gather(logp, -1, labels.unsqueeze(-1)).squeeze(-1)
     return logpy
 
 def qidx_from_qs(qs, labels):

@@ -13,7 +13,6 @@ import threading
 
 import RLAlgs
 
-
 class QTabular:
     def __init__(self, env, stochasticPolicy=False, seed=None, qV=None):
         self.NS = env.observation_space.n
