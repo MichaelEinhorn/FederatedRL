@@ -114,3 +114,25 @@ class ViTValue(nn.Module):
         l = self.model.head(x)
         v = self.value(x)
         return l, v
+    
+from copy import deepcopy
+class VectorModelValue(nn.Module):
+    def __init__(self, model, n=2):
+        super().__init__()
+        self.modelList = nn.ModuleList([deepcopy(model) for _ in range(n)])
+        self.n = n
+    
+    # Model x Batch x Data
+    # https://discuss.pytorch.org/t/is-it-possible-to-execute-two-modules-in-parallel-in-pytorch/54866
+    # if there is capacity, the GPU calls should execute in parallel asynchronously
+    def forward(self, x):
+        lList = []
+        vList = []
+        for i in range(self.n):
+            l, v = self.modelList[i](x[i])
+            lList.append(l)
+            vList.append(v)
+        l = torch.stack(lList, dim=0)
+        v = torch.stack(vList, dim=0)
+        return l, v
+        
