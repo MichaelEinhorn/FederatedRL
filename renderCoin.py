@@ -16,13 +16,16 @@ args = parser.parse_args()
 if args.model == "resnet":
     model = CVModels.CNNAgent([64, 64, 3], 15, channels=16, layers=[1,1,1,1], scale=[1,1,1,1], vheadLayers=1)
     model.load_state_dict(torch.load("resnet.pth"))
-elif args.model == "vit":
-    model = CVModels.ViTValue().to(device)
-    model.load_state_dict(torch.load("vit.pth"))
+elif "vit" in args.model:
+    if "Big" in args.model:
+        model = CVModels.ViTValue(depth=4, num_heads=4, embed_dim=32, mlp_ratio=4, valueHeadLayers=1).to(device)
+    else:
+        model = CVModels.ViTValue().to(device)
+    model.load_state_dict(torch.load(f"models/{args.model}/model.pth"))
 model.to(device)
 
 model.eval()
-envVideo = ProcgenGym3Env(num=1, env_name="coinrun", distribution_mode="hard", paint_vel_info=True, render_mode="rgb_array")
+envVideo = ProcgenGym3Env(num=1, env_name="coinrun", distribution_mode="easy", paint_vel_info=True, render_mode="rgb_array", use_backgrounds=False, restrict_themes=True)
 envVideo = gym3.ViewerWrapper(envVideo, info_key="rgb")
 while True:
     rew, obs, first = envVideo.observe()
