@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 import time
+from copy import deepcopy
 import core
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -125,6 +126,8 @@ class Player:
 
             t = time.time()
             logits, values = model(obs)
+            values = values.squeeze(-1)
+
             actions = torch.multinomial(F.softmax(logits, dim=-1), num_samples=1, generator=self.rng).squeeze()
             # epsilon greedy
             if self.params["epsilon"] != 0.0:
@@ -209,8 +212,9 @@ class Player:
             delta = reward + gamma * nextvalues - values
             lastgaelam = delta + gamma * lam * lastgaelam
 
-            advantages_reversed.append(lastgaelam)
-            returns_reversed.append(lastgaelam + values)
+            # dont reassign advantages to 0
+            advantages_reversed.append(deepcopy(lastgaelam))
+            returns_reversed.append(deepcopy(lastgaelam + values))
 
             for i in range(self.num_agents):
                 if first[i]:
@@ -317,9 +321,9 @@ class VectorPlayer:
         self.transitionBuffer = transitionBuffer
 
         # stats
-        self.meanEpsisodeLength = 0
-        self.meanNonZeroRewards = 0
-        self.meanEpisodeRewards = 0
+        self.meanEpsisodeLength = [0 for j in range(self.num_models)]
+        self.meanNonZeroRewards = [0 for j in range(self.num_models)]
+        self.meanEpisodeRewards = [0 for j in range(self.num_models)]
 
         self.advantageMean = -1
         self.advantageStd = -1
@@ -330,9 +334,9 @@ class VectorPlayer:
         self.episodes = 0
         self.gameLoops = 0
 
-        self.startSteps = [self.timeStep for i in range(self.num_agents)]
-        self.zeroRew = [0 for i in range(self.num_agents)]
-        self.sumRew = [0 for i in range(self.num_agents)]
+        self.startSteps = [[self.timeStep for i in range(self.num_agents)] for j in range(self.num_models)]
+        self.zeroRew = [[0 for i in range(self.num_agents)] for j in range(self.num_models)]
+        self.sumRew = [[0 for i in range(self.num_agents)] for j in range(self.num_models)]
 
         self.timing = {}
 
@@ -354,9 +358,9 @@ class VectorPlayer:
         self.epsilon = state_dict["epsilon"]
         self.transitions = state_dict["transitions"]
 
-        self.startSteps = [self.timeStep for i in range(self.num_agents)]
-        self.zeroRew = [0 for i in range(self.num_agents)]
-        self.sumRew = [0 for i in range(self.num_agents)]
+        self.startSteps = [[self.timeStep for i in range(self.num_agents)] for j in range(self.num_models)]
+        self.zeroRew = [[0 for i in range(self.num_agents)] for j in range(self.num_models)]
+        self.sumRew = [[0 for i in range(self.num_agents)] for j in range(self.num_models)]
 
     def reset(self, rEnv=None, **params):
         if rEnv is not None:
@@ -369,18 +373,18 @@ class VectorPlayer:
         self.timeStep = 0
         self.episodes = 0
         self.gameLoops = 0
-        self.startSteps = [self.timeStep for i in range(self.num_agents)]
-        self.zeroRew = [0 for i in range(self.num_agents)]
-        self.sumRew = [0 for i in range(self.num_agents)]
+        self.startSteps = [[self.timeStep for i in range(self.num_agents)] for j in range(self.num_models)]
+        self.zeroRew = [[0 for i in range(self.num_agents)] for j in range(self.num_models)]
+        self.sumRew = [[0 for i in range(self.num_agents)] for j in range(self.num_models)]
 
 
     @torch.no_grad()
     def runGame(self, model, steps=100):
         # used to calculate mean stats
         episodeCount = 0
-        self.meanEpsisodeLength = 0
-        self.meanNonZeroRewards = 0
-        self.meanEpisodeRewards = 0
+        self.meanEpsisodeLength = [0 for j in range(self.num_models)]
+        self.meanNonZeroRewards = [0 for j in range(self.num_models)]
+        self.meanEpisodeRewards = [0 for j in range(self.num_models)]
         self.timing = {"time/game/observe": 0, "time/game/act": 0, "time/game/forward": 0, "time/game/stats": 0, "time/game/transition": 0}
 
         self.stepsPerGameLoop = steps
@@ -389,7 +393,7 @@ class VectorPlayer:
             end_step -= len(self.transitions)
             self.staleSteps = len(self.transitions)
 
-        while (not self.params["finishedOnly"] and self.timeStep < end_step) or (self.params["finishedOnly"] and min(self.startSteps) < end_step):
+        while (not self.params["finishedOnly"] and self.timeStep < end_step) or (self.params["finishedOnly"] and np.amin(self.startSteps) < end_step):
             t = time.time()
             rew, obs, first = self.env.observe()
             
@@ -401,20 +405,31 @@ class VectorPlayer:
             obs = torch.tensor(obs['rgb']).permute(0, 3, 1, 2).float().to(device)
             obs /= 255.0 # turn 0-255 to 0-1
 
-            if self.num_agents == 1:
+            if self.num_agents * self.num_models == 1:
                 rew = rew.unsqueeze(0)
                 obs = obs.unsqueeze(0)
                 first = first.unsqueeze(0)
+
+            # unflatten the model and agent dims
+            rew = torch.reshape(rew, (self.num_models, self.num_agents) + rew.shape[1:])
+            obs = torch.reshape(obs, (self.num_models, self.num_agents) + obs.shape[1:])
+            first = torch.reshape(first, (self.num_models, self.num_agents) + first.shape[1:])
 
             self.timing["time/game/observe"] += time.time() - t
 
             t = time.time()
             logits, values = model(obs)
-            actions = torch.multinomial(F.softmax(logits, dim=-1), num_samples=1, generator=self.rng).squeeze()
+            values = values.squeeze(-1)
+
+            # doesn't look like multinomial can do m x n x a, so (mxn) x a
+            logitsFlat = torch.reshape(logits, (self.num_models * self.num_agents,) + logits.shape[2:])
+            actionsFlat = torch.multinomial(F.softmax(logitsFlat, dim=-1), num_samples=1, generator=self.rng).squeeze()
+            actions = torch.reshape(actionsFlat, (self.num_models, self.num_agents) + actionsFlat.shape[1:])
+
             # epsilon greedy
             if self.params["epsilon"] != 0.0:
-                rand = torch.rand(self.num_agents, generator=self.rng ,device=device) < self.params["epsilon"]
-                actions = torch.where(rand, torch.randint(0, 15, (self.num_agents,), generator=self.rng, device=device), actions)
+                rand = torch.rand((self.num_models, self.num_agents), generator=self.rng ,device=device) < self.params["epsilon"]
+                actions = torch.where(rand, torch.randint(0, 15, (self.num_models, self.num_agents), generator=self.rng, device=device), actions)
 
             logp = core.logprobs_from_logits(logits, actions)
             self.timing["time/game/forward"] += time.time() - t
@@ -423,45 +438,47 @@ class VectorPlayer:
             values = values.to("cpu")
             
             t = time.time()
-            if self.num_agents == 1:
+            if self.num_agents * self.num_models == 1:
                 self.env.act(actions.squeeze().numpy())
             else:
-                self.env.act(actions.numpy())
+                actionsFlat = torch.reshape(actions, (self.num_models * self.num_agents,) + actions.shape[2:])
+                self.env.act(actionsFlat.numpy())
             self.timing["time/game/act"] += time.time() - t
 
             # print(logits.shape)
             # print(actions.shape)
             # print(rew.shape)
             t = time.time()
-            for i in range(self.num_agents):
-                if first[i]:
-                    if len(self.transitions) != 0:
-                        # reward transforms end of episode
-                        if self.params["terminateReward"] != 0:
-                            self.transitions[-1]["reward"][i] += self.params["terminateReward"]
+            for j in range(self.num_models):
+                for i in range(self.num_agents):
+                    if first[j, i]:
+                        if len(self.transitions) != 0:
+                            # reward transforms end of episode
+                            if self.params["terminateReward"] != 0:
+                                self.transitions[-1]["reward"][j, i] += self.params["terminateReward"]
 
-                            # fix stats
-                            self.sumRew[i] += self.params["terminateReward"]
-                            if self.params["terminateReward"] > 0 and self.zeroRew[i] == 0:
-                                self.zeroRew[i] = 1
-                
-                    if self.timeStep != 0:
-                        # end of episode stats
-                        self.meanEpsisodeLength += self.timeStep - self.startSteps[i]
-                        self.meanNonZeroRewards += self.zeroRew[i]
-                        self.meanEpisodeRewards += self.sumRew[i]
+                                # fix stats
+                                self.sumRew[j][i] += self.params["terminateReward"]
+                                if self.params["terminateReward"] > 0 and self.zeroRew[j][i] == 0:
+                                    self.zeroRew[j][i] = 1
+                    
+                        if self.timeStep != 0:
+                            # end of episode stats
+                            self.meanEpsisodeLength[j] += self.timeStep - self.startSteps[j][i]
+                            self.meanNonZeroRewards[j] += self.zeroRew[j][i]
+                            self.meanEpisodeRewards[j] += self.sumRew[j][i]
 
-                        self.episodes += 1
-                        episodeCount += 1
-                        # reset
-                        self.startSteps[i] = self.timeStep
-                        self.zeroRew[i] = 0
-                        self.sumRew[i] = 0
+                            self.episodes += 1
+                            episodeCount += 1
+                            # reset
+                            self.startSteps[j][i] = self.timeStep
+                            self.zeroRew[j][i] = 0
+                            self.sumRew[j][i] = 0
 
-                # every step stats
-                self.sumRew[i] += rew[i].item()
-                if rew[i] > 0 and self.zeroRew[i] == 0:
-                    self.zeroRew[i] = 1
+                    # every step stats
+                    self.sumRew[j][i] += rew[j,i].item()
+                    if rew[j][i] > 0 and self.zeroRew[j][i] == 0:
+                        self.zeroRew[j][i] = 1
 
             self.timing["time/game/stats"] += time.time() - t
             
@@ -475,13 +492,14 @@ class VectorPlayer:
             self.timeStep += 1
 
         if episodeCount != 0:
-            self.meanEpsisodeLength /= episodeCount
-            self.meanNonZeroRewards /= episodeCount
-            self.meanEpisodeRewards /= episodeCount
+            for j in range(self.num_models):
+                self.meanEpsisodeLength[j] /= episodeCount
+                self.meanNonZeroRewards[j] /= episodeCount
+                self.meanEpisodeRewards[j] /= episodeCount
 
     @torch.no_grad()
     def computeAdvantages(self, gamma=0.99, lam=0.95, whiten=True):
-        lastgaelam = np.zeros(self.num_agents)
+        lastgaelam = np.zeros((self.num_models, self.num_agents))
         advantages_reversed = []
         returns_reversed = []
         for t in reversed(range(len(self.transitions))):
@@ -494,12 +512,14 @@ class VectorPlayer:
             delta = reward + gamma * nextvalues - values
             lastgaelam = delta + gamma * lam * lastgaelam
 
-            advantages_reversed.append(lastgaelam)
-            returns_reversed.append(lastgaelam + values)
+            # don't reassign advantages to 0
+            advantages_reversed.append(deepcopy(lastgaelam))
+            returns_reversed.append(deepcopy(lastgaelam + values))
 
-            for i in range(self.num_agents):
-                if first[i]:
-                    lastgaelam[i] = 0
+            for j in range(self.num_models):
+                for i in range(self.num_agents):
+                    if first[j,i]:
+                        lastgaelam[j, i] = 0
 
         returns_reversed.reverse()
         advantages_reversed.reverse()
@@ -507,14 +527,14 @@ class VectorPlayer:
         advantages_mean = 0
         advantages_std = 1
         if whiten:
-            advantageTens = torch.stack(advantages_reversed) # dim 0
+            advantageTens = torch.stack(advantages_reversed, dim=2)
             if self.params["finishedOnly"]:
-                advantageTens = advantageTens[:self.stepsPerGameLoop] # only whiten advantages which will be returned
-            advantages_mean = torch.mean(advantageTens)
-            advantages_std = torch.std(advantageTens)
+                advantageTens = advantageTens[:, :, :self.stepsPerGameLoop] # only whiten advantages which will be returned
+            advantages_mean = torch.mean(advantageTens, dim=tuple(i for i in range(1, len(advantageTens.shape))))
+            advantages_std = torch.std(advantageTens, dim=tuple(i for i in range(1, len(advantageTens.shape))))
 
-            self.advantageMean = advantages_mean.item()
-            self.advantageStd = advantages_std.item()
+            self.advantageMean = advantages_mean
+            self.advantageStd = advantages_std
         
         return returns_reversed, advantages_reversed, advantages_mean, advantages_std
 
@@ -532,7 +552,7 @@ class VectorPlayer:
             # trans_dict["return"] = 
             # trans_dict["advantage"] 
             if whiten:
-                adv = (advantages[i] - advantages_mean) / advantages_std
+                adv = (advantages[i] - advantages_mean.unsqueeze(-1)) / advantages_std.unsqueeze(-1)
             else:
                 adv = advantages[i]
             lineItem = (trans_dict["reward"], 

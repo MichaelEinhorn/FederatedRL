@@ -116,6 +116,7 @@ class PPO:
 
                 t = time.time()
                 logits, vpred = self.model(obs)
+                vpred = vpred.squeeze(-1)
                 logprob = core.logprobs_from_logits(logits, action)
                 self.timing[f"time/{self.alg_name}/forward"] += time.time() - t
 
@@ -249,7 +250,7 @@ class VectorPPO:
         self.optimzers = []
         self.schedulers = []
         for i in range(self.num_models):
-            self.optimzers.append(transformers.AdamW(self.modelList[i].parameters(), lr=self.params["lr"], weight_decay=self.params["weight_decay"]))
+            self.optimzers.append(transformers.AdamW(self.model.modelList[i].parameters(), lr=self.params["lr"], weight_decay=self.params["weight_decay"]))
             self.schedulers.append(transformers.get_cosine_schedule_with_warmup(self.optimzers[-1], self.params["warmup_steps"], self.params["train_steps"]))
         # self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.params["lr"])
 
@@ -324,6 +325,8 @@ class VectorPPO:
 
                 t = time.time()
                 logits, vpred = self.model(obs)
+                vpred = vpred.squeeze(-1)
+
                 logprob = core.logprobs_from_logits(logits, action) # gathers on last dimension keeps Model x Batch
                 self.timing[f"time/{self.alg_name}/forward"] += time.time() - t
 
@@ -334,8 +337,8 @@ class VectorPPO:
                 vf_losses1 = (vpred - returns) ** 2
                 vf_losses2 = (vpredclipped - returns) ** 2
                 # mean over all dimensions except model dim
-                vf_loss = .5 * torch.mean(torch.max(vf_losses1, vf_losses2), dim=(i for i in range(1, len(vf_losses1.shape))))
-                vf_clipfrac = torch.mean(torch.gt(vf_losses2, vf_losses1).double(), dim=(i for i in range(1, len(vf_losses1.shape))))
+                vf_loss = .5 * torch.mean(torch.max(vf_losses1, vf_losses2), dim=tuple(i for i in range(1, len(vf_losses1.shape))))
+                vf_clipfrac = torch.mean(torch.gt(vf_losses2, vf_losses1).double(), dim=tuple(i for i in range(1, len(vf_losses1.shape))))
 
                 ratio = torch.exp(logprob - old_logprobs)
                 pg_losses = -advantages * ratio
@@ -344,13 +347,14 @@ class VectorPPO:
                                                        1.0 + self.params["cliprange"])
                 
                 # mean over all dimensions except model dim
-                pg_loss = torch.mean(torch.max(pg_losses, pg_losses2), dim=(i for i in range(1, len(pg_losses.shape))))
-                pg_clipfrac = torch.mean(torch.gt(pg_losses2, pg_losses).double(), dim=(i for i in range(1, len(pg_losses.shape))))
+                pg_loss = torch.mean(torch.max(pg_losses, pg_losses2), dim=tuple(i for i in range(1, len(pg_losses.shape))))
+                pg_clipfrac = torch.mean(torch.gt(pg_losses2, pg_losses).double(), dim=tuple(i for i in range(1, len(pg_losses.shape))))
 
                 loss = pg_loss + self.params['vf_coef'] * vf_loss
 
                 # mean over all dimensions except model dim
-                entropy = torch.mean(core.entropy_from_logits(logits), dim=(i for i in range(1, len(logits.shape))))
+                entropy = core.entropy_from_logits(logits)
+                entropy = torch.mean(entropy, dim=tuple(i for i in range(1, len(entropy.shape))))
                 ent_loss = -entropy
                 if self.params["ent_coef"] != 0.0:
                     loss += self.params["ent_coef"] * ent_loss
@@ -359,7 +363,8 @@ class VectorPPO:
                     return loss
                 else:
                     t = time.time()
-                    loss.backward()
+                    lossSum = torch.sum(loss)
+                    lossSum.backward()
                     self.timing[f"time/{self.alg_name}/backward"] += time.time() - t
                     t = time.time()
                     for i in range(self.num_models):
@@ -367,22 +372,22 @@ class VectorPPO:
                     self.timing[f"time/{self.alg_name}/optim"] += time.time() - t
 
                 t = time.time()
-                approxkl = .5 * torch.mean((logprob - old_logprobs) ** 2, dim=(i for i in range(1, len(logprob.shape))))
-                policykl = torch.mean(logprob - old_logprobs, dim=(i for i in range(1, len(logprob.shape))))
-                return_mean, return_var = torch.mean(returns, dim=(i for i in range(1, len(returns.shape)))), torch.var(returns, dim=(i for i in range(1, len(returns.shape))))
-                value_mean, value_var = torch.mean(old_values, dim=(i for i in range(1, len(old_values.shape)))), torch.var(old_values, dim=(i for i in range(1, len(old_values.shape))))
+                approxkl = .5 * torch.mean((logprob - old_logprobs) ** 2, dim=tuple(i for i in range(1, len(logprob.shape))))
+                policykl = torch.mean(logprob - old_logprobs, dim=tuple(i for i in range(1, len(logprob.shape))))
+                return_mean, return_var = torch.mean(returns, dim=tuple(i for i in range(1, len(returns.shape)))), torch.var(returns, dim=tuple(i for i in range(1, len(returns.shape))))
+                value_mean, value_var = torch.mean(old_values, dim=tuple(i for i in range(1, len(old_values.shape)))), torch.var(old_values, dim=tuple(i for i in range(1, len(old_values.shape))))
 
                 stats = dict(
-                    reward = torch.mean(reward, dim=(i for i in range(1, len(reward.shape)))),
+                    reward = torch.mean(reward, dim=tuple(i for i in range(1, len(reward.shape)))),
                     loss=dict(policy=pg_loss, 
                             value=self.params['vf_coef'] * vf_loss, 
                             ent=self.params["ent_coef"] * ent_loss, 
                             total=loss),
                     policy=dict(entropy=entropy, approxkl=approxkl, policykl=policykl, clipfrac=pg_clipfrac,
-                                advantages_mean=torch.mean(advantages, dim=(i for i in range(1, len(advantages.shape)))),
-                                ratio_mean=torch.mean(ratio, dim=(i for i in range(1, len(ratio.shape))))),
+                                advantages_mean=torch.mean(advantages, dim=tuple(i for i in range(1, len(advantages.shape)))),
+                                ratio_mean=torch.mean(ratio, dim=tuple(i for i in range(1, len(ratio.shape))))),
                     returns=dict(mean=return_mean, var=return_var),
-                    val=dict(vpred=torch.mean(vpred, dim=(i for i in range(1, len(vpred.shape)))), 
+                    val=dict(vpred=torch.mean(vpred, dim=tuple(i for i in range(1, len(vpred.shape)))), 
                             clipfrac=vf_clipfrac, mean=value_mean, var=value_var),
                 )
                 stats = core.dict_to_cpu(core.flatten_dict(stats))
