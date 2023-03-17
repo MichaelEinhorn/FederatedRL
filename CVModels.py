@@ -1,7 +1,8 @@
+from copy import deepcopy
+
 import torch
 from torch import nn
-from torch.nn import functional as F
-from torchinfo import summary
+from timm.models.vision_transformer import VisionTransformer
 
 import resnet
 import core
@@ -31,7 +32,7 @@ class ValueHead(nn.Module):
         return output
 
 class CNNAgent(nn.Module):
-    def __init__(self, obs_shape, num_actions, channels=32, layers=[2,2,2,2], scale=[1,1,1,1], vheadLayers=1):
+    def __init__(self, obs_shape, num_actions, channels=32, layers=None, scale=None, vheadLayers=1):
         super(CNNAgent, self).__init__()
 
         img_size = 64
@@ -101,11 +102,9 @@ class CNNAgent(nn.Module):
 
         return l, v
     
-from timm.models.vision_transformer import VisionTransformer
 class ViTValue(nn.Module):
     def __init__(self, img_size=64, patch_size=4, num_classes=15, depth=3, num_heads=4, embed_dim=16, mlp_ratio=4, valueHeadLayers=1):
         super().__init__()
-        from CVModels import ValueHead
         self.model = VisionTransformer(img_size=img_size, patch_size=patch_size, num_classes=num_classes, depth=depth, num_heads=num_heads, embed_dim=embed_dim, mlp_ratio=mlp_ratio)
         self.value = ValueHead(n_in=embed_dim, n_out=1, layers=valueHeadLayers)
     def forward(self, x):
@@ -115,12 +114,59 @@ class ViTValue(nn.Module):
         v = self.value(x)
         return l, v
     
-from copy import deepcopy
+def printParams(modelList):
+    print(len(list(modelList[0].parameters())))
+    for paramList in list(zip(*[list(submodel.parameters()) for submodel in modelList])):
+        for param in paramList:
+            print(param.shape, param.device, param.dtype, param.requires_grad)
+        
+        print("data equality ", torch.all(paramList[0].data == paramList[1].data), "ref equality ", id(paramList[0]) == id(paramList[1]))
+
+@torch.no_grad()
+def avgSync(modelList):
+    # counts upload and download, not including log(N) communication complexity for a network architecture
+    # data is only for a single clients uploads and downloads
+    stats = {"sync/comms": 2, "sync/data": 0}
+    for paramList in list(zip(*[list(submodel.parameters()) for submodel in modelList])):
+        avgParam = torch.mean(torch.stack([param.data for param in paramList], dim=0), dim=0).detach()
+        for param in paramList:
+            stats["sync/data"] += 2 * param.data.numel() * param.data.element_size() / 1048576 # megabyte
+            # in place copy
+            param.data.copy_(avgParam)
+    return stats
+
+# adds the sums of all the diffs from the last global params
+class sumSync:
+    def __init__(self):
+        self.refParams = []
+
+    @torch.no_grad()
+    def __call__(self, modelList):
+        stats = {"sync/comms": 2, "sync/data": 0}
+        first = len(self.refParams) == 0 # first time no global params to sum diffs from
+        for i, paramList in enumerate(list(zip(*[list(submodel.parameters()) for submodel in modelList]))):
+            if first: # average first time
+                sumParam = torch.mean(torch.stack([param.data for param in paramList], dim=0), dim=0).detach()
+                self.refParams.append(sumParam)
+            else:
+                ref = self.refParams[i]
+                sumParam = torch.sum(torch.stack([param.data - ref.data for param in paramList], dim=0), dim=0).detach() # sum of diffs
+                sumParam += ref.data # add reference back
+
+            for param in paramList:
+                stats["sync/data"] += 2 * param.data.numel() * param.data.element_size() / 1048576 # megabyte
+                # in place copy
+                param.data.copy_(sumParam)
+        return stats
+    
 class VectorModelValue(nn.Module):
-    def __init__(self, model, n=2):
+    def __init__(self, model, n=2, syncFunc=avgSync):
         super().__init__()
         self.modelList = nn.ModuleList([deepcopy(model) for _ in range(n)])
         self.n = n
+        self._syncFunc = syncFunc
+
+        self.stats = {"sync/comms": 0, "sync/data": 0}
     
     # Model x Batch x Data
     # https://discuss.pytorch.org/t/is-it-possible-to-execute-two-modules-in-parallel-in-pytorch/54866
@@ -135,4 +181,9 @@ class VectorModelValue(nn.Module):
         l = torch.stack(lList, dim=0)
         v = torch.stack(vList, dim=0)
         return l, v
-        
+    
+    def sync(self):
+        if self.n == 1:
+            return
+        stat = self._syncFunc(self.modelList)
+        core.update_dict_add(self.stats, stat)

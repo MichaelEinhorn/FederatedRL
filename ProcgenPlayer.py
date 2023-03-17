@@ -1,8 +1,10 @@
+import time
+from copy import deepcopy
+
 import numpy as np
 import torch
 from torch.nn import functional as F
-import time
-from copy import deepcopy
+
 import core
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

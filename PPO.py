@@ -1,10 +1,8 @@
-import torch
 import time
+import torch
 import transformers
 import datastructures
 import core
-
-import ProcgenPlayer
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -222,17 +220,25 @@ class VectorPPO:
         "vf_coef": 0.5,
         "epoch_steps": 256,
         "epochs_per_game": 1,
+        "batch_size": 2, # multiplied by num agents and num models
         # Entropy coefficient
         "ent_coef" : 0.0,
         # optimizer
         "weight_decay": 0.0,
         "warmup_steps": 0,
         "train_steps": 1000,
+        # synchronization
+        "sync_epochs": -1,
+        "sync_steps": -1, # not carried over between epochs
     }
     def __init__(self, model, env, num_agents=1, num_models=1, player=None, **params):
         self.params = self.default_params
         self.params.update(params)
         self.alg_name = self.params["alg_name"]
+
+        if self.params["sync_epochs"] != -1 and self.params["sync_epochs"] < 1:
+            self.params["sync_steps"] = int(self.params["sync_epochs"] * self.params["epoch_steps"])
+            self.params["sync_epochs"] = -1
         
         self.env = env
         self.num_agents = num_agents
@@ -245,6 +251,8 @@ class VectorPPO:
         self.player.transitionBuffer = self.transitionBuffer
 
         self.dataset = datastructures.LineDataset(self.transitionBuffer, self.params["epoch_steps"])
+        # buffer sample already shuffles
+        self.dataloader = torch.utils.data.DataLoader(self.dataset, batch_size=self.params["batch_size"], shuffle=False, num_workers=1, collate_fn=datastructures.VectorCollator)
 
         # separate optimizer for each model. Not sure if a single optimizer for all params would actually be the same as independent training
         self.optimzers = []
@@ -293,7 +301,7 @@ class VectorPPO:
         self.player.fillBuffer(gamma=self.params["gamma"], lam=self.params["lam"], whiten=self.params["whiten"])
         self.timing["time/computeAdvantages"] = time.time() - t
 
-        self.steps += self.params["epoch_steps"] * self.num_agents
+        self.steps += self.params["epoch_steps"] * self.num_agents * self.num_models
 
     def train(self, debug=False):
         end_epoch = self.epoch + self.params["epochs_per_game"]
@@ -301,12 +309,12 @@ class VectorPPO:
             step_stats = {}
             batchCount = 0
             epochTime = time.time()
-            self.timing.update({f"time/{self.alg_name}/forward": 0, f"time/{self.alg_name}/backward": 0, f"time/{self.alg_name}/optim": 0, f"time/{self.alg_name}/stats": 0})
+            self.timing.update({f"time/{self.alg_name}/forward": 0, f"time/{self.alg_name}/backward": 0, f"time/{self.alg_name}/optim": 0, f"time/{self.alg_name}/stats": 0, 
+                                "time/sync": 0})
             
-
-            for batch in self.dataset:
+            # for batch in self.dataset:
+            for batch in self.dataloader:
                 reward, obs, action, first, old_values, old_logprobs, next_val, returns, advantages = batch
-                batchCount += 1
                 
                 reward = reward.to(device)
                 obs = obs.to(device)
@@ -395,6 +403,18 @@ class VectorPPO:
                 core.update_dict_add(step_stats, stats)
                 self.timing[f"time/{self.alg_name}/stats"] += time.time() - t
 
+                # synchronization by steps
+                if self.params["sync_steps"] != -1 and batchCount % self.params["sync_steps"] == 0:
+                    t = time.time()
+                    self.model.sync()
+                    self.timing["time/sync"] += time.time() - t
+
+                batchCount += 1
+
+            ########################################### end of batch loop ##########################################################
+
+
+
             self.timing["time/epoch"] = time.time() - epochTime
 
             t = time.time()
@@ -421,8 +441,15 @@ class VectorPPO:
 
             self.timing[f"time/{self.alg_name}/stats"] += time.time() - t
 
+            # synchronization by epochs
+            if self.params["sync_epochs"] != -1 and self.epoch % self.params["sync_epochs"] == 0:
+                t = time.time()
+                self.model.sync()
+                self.timing["time/sync"] += time.time() - t
+
+            train_stats.update(self.model.stats) # communication stats
             train_stats.update(self.timing)
-            train_stats.update(self.player.timing)
+            train_stats.update(self.player.timing) # gameplay loop
             self.timing = {}
             self.all_stats.append(train_stats)
             self.epoch += 1

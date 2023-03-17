@@ -125,3 +125,4 @@ dmypy.json
 notes.txt
 autoExp.sh
 *.csv
+.pylintrc
