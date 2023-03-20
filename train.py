@@ -28,7 +28,6 @@ envKW = {}
 
 modelPath = "models/"
 def loadAll(fname, loadEnv=True):
-    global model, player, ppo, env, envKW
     model.load_state_dict(torch.load(modelPath + fname + "/model.pth"))
     player.load_state_dict(torch.load(modelPath + fname + "/player.pth"))
     ppo.load_state_dict(torch.load(modelPath + fname + "/ppo.pth"))
@@ -41,7 +40,6 @@ def loadAll(fname, loadEnv=True):
     ppo.all_stats = torch.load(modelPath + fname + "/stats.pth")
 
 def saveAll(fname):
-    global model, player, ppo, env, envKW
     os.makedirs(modelPath + fname, exist_ok=True)
     torch.save(model.state_dict(), modelPath + fname + "/model.pth")
     torch.save(player.state_dict(), modelPath + fname + "/player.pth")
@@ -55,12 +53,12 @@ num_models = args.num_models
 num_agents = args.num_agents
 
 print("init model")
-if "vector" in args.model.lowercase():
+if "vector" in args.model.lower():
     if args.model == "resnet":
         submodel = CVModels.CNNAgent([64, 64, 3], 15, channels=16, layers=[1,1,1,1], scale=[1,1,1,1], vheadLayers=1)
         model = CVModels.VectorModelValue(submodel, num_models)
-    elif "vit" in args.model.lowercase():
-        if "big" in args.model.lowercase():
+    elif "vit" in args.model.lower():
+        if "big" in args.model.lower():
             submodel = CVModels.ViTValue(depth=4, num_heads=4, embed_dim=32, mlp_ratio=4, valueHeadLayers=1).to(device)
         else:
             submodel = CVModels.ViTValue().to(device)
@@ -70,8 +68,8 @@ else:
     if args.model == "resnet":
         model = CVModels.CNNAgent([64, 64, 3], 15, channels=16, layers=[1,1,1,1], scale=[1,1,1,1], vheadLayers=1)
         model.load_state_dict(torch.load("resnet.pth"))
-    elif "vit" in args.model.lowercase():
-        if "big" in args.model.lowercase():
+    elif "vit" in args.model.lower():
+        if "big" in args.model.lower():
             model = CVModels.ViTValue(depth=4, num_heads=4, embed_dim=32, mlp_ratio=4, valueHeadLayers=1).to(device)
         else:
             model = CVModels.ViTValue().to(device)
@@ -96,7 +94,7 @@ if os.isdir(modelPath + args.model):
     loadAll(args.model)
     
 model.train()
-print(summary(model, input_size=(2, 2, 3, 64, 64)))
+print(summary(model, input_size=(num_models, num_agents, 3, 64, 64)))
 
 for i in range(args.epoch):
     ppo.runGame()
