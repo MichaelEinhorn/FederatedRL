@@ -15,6 +15,10 @@ parser.add_argument("--model", type=str, default="resnet", help="Path to model f
 parser.add_argument("--epoch", type=int, default=100, help="num epochs")
 parser.add_argument("--num_models", type=int, default=1, help="num epochs")
 parser.add_argument("--num_agents", type=int, default=16, help="num epochs")
+# sync
+parser.add_argument("--syncFunc", type=str, default="avg", help="sync function")
+parser.add_argument("--syncFreq", type=int, default=1, help="sync frequency in epochs")
+
 args = parser.parse_args()
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -28,6 +32,7 @@ envKW = {}
 
 modelPath = "models/"
 def loadAll(fname, loadEnv=True):
+    global env, envKW
     model.load_state_dict(torch.load(modelPath + fname + "/model.pth"))
     player.load_state_dict(torch.load(modelPath + fname + "/player.pth"))
     ppo.load_state_dict(torch.load(modelPath + fname + "/ppo.pth"))
@@ -48,28 +53,35 @@ def saveAll(fname):
     torch.save(env.callmethod("get_state"), modelPath + fname + "/env_states.pth")
     torch.save(ppo.all_stats, modelPath + fname + "/stats.pth")
 
-
+modelName = args.model
+epoch = args.epoch
 num_models = args.num_models
 num_agents = args.num_agents
+syncFreq = args.syncFreq
+
+if args.syncFunc == "avg":
+    syncFunc = CVModels.avgSync
+elif args.syncFunc == "sum":
+    syncFunc = CVModels.sumSync()
 
 print("init model")
-if "vector" in args.model.lower():
-    if args.model == "resnet":
+if "vector" in modelName.lower():
+    if modelName == "resnet":
         submodel = CVModels.CNNAgent([64, 64, 3], 15, channels=16, layers=[1,1,1,1], scale=[1,1,1,1], vheadLayers=1)
         model = CVModels.VectorModelValue(submodel, num_models)
-    elif "vit" in args.model.lower():
-        if "big" in args.model.lower():
+    elif "vit" in modelName.lower():
+        if "big" in modelName.lower():
             submodel = CVModels.ViTValue(depth=4, num_heads=4, embed_dim=32, mlp_ratio=4, valueHeadLayers=1).to(device)
         else:
             submodel = CVModels.ViTValue().to(device)
-        model = CVModels.VectorModelValue(submodel, num_models, syncFunc=CVModels.avgSync)
+        model = CVModels.VectorModelValue(submodel, num_models, syncFunc=syncFunc)
     model.to(device)
 else:
-    if args.model == "resnet":
+    if modelName == "resnet":
         model = CVModels.CNNAgent([64, 64, 3], 15, channels=16, layers=[1,1,1,1], scale=[1,1,1,1], vheadLayers=1)
         model.load_state_dict(torch.load("resnet.pth"))
-    elif "vit" in args.model.lower():
-        if "big" in args.model.lower():
+    elif "vit" in modelName.lower():
+        if "big" in modelName.lower():
             model = CVModels.ViTValue(depth=4, num_heads=4, embed_dim=32, mlp_ratio=4, valueHeadLayers=1).to(device)
         else:
             model = CVModels.ViTValue().to(device)
@@ -82,26 +94,28 @@ print(env.ob_space)
 print(env.ac_space)
 
 print("init player and ppo")
+gamma = 0.99
 rewardScale = 8.0
 terminateReward = 1 - 10.0 / rewardScale
-livingReward = 0
-print("terminateReward", terminateReward, "livingReward", livingReward, "discountedSumLiving", livingReward / (1 - 0.99)) # if terminate reward > discountedSumLiving the agent will perfer to run into obstacles.
-player = VectorPlayer(env, num_agents=num_agents, num_models=num_models, epsilon=0.01, epsilon_decay=0.99, rewardScale=rewardScale, livingReward=0, terminateReward=terminateReward)
-ppo = VectorPPO(model, env, num_agents=num_agents, num_models=num_models, player=player, gamma=0.99, weight_decay=0.0, warmup_steps=10, train_steps=1000, sync_epochs=1)
+livingReward = -0.001
+print("terminateReward", terminateReward, "livingReward", livingReward, "discountedSumLiving", livingReward / (1 - gamma)) # if terminate reward > discountedSumLiving the agent will perfer to run into obstacles.
+player = VectorPlayer(env, num_agents=num_agents, num_models=num_models, epsilon=0.01, epsilon_decay=0.99, rewardScale=rewardScale, livingReward=livingReward, terminateReward=terminateReward)
+ppo = VectorPPO(model, env, num_agents=num_agents, num_models=num_models, player=player, gamma=gamma, weight_decay=0.0, warmup_steps=10, train_steps=epoch, sync_epochs=syncFreq)
 
-if os.path.isdir(modelPath + args.model):
+if os.path.isdir(modelPath + modelName):
     print("loading existing state")
-    loadAll(args.model)
+    loadAll(modelName)
     
 model.train()
 print(summary(model, input_size=(num_models, num_agents, 3, 64, 64)))
 
-for i in range(args.epoch):
+for i in range(epoch):
     ppo.runGame()
     ppo.train()
-    print(f"train epoch {i}/{args.epoch} episodeLength {ppo.all_stats[-1]['game/episodeLength']} episodeReward {ppo.all_stats[-1]['game/episodeReward']} stale {ppo.all_stats[-1]['game/staleSteps']}                    ", end="\n" if i % 10 == 0 else "\r")
+    print(f"train epoch {i}/{args.epoch} episodeLength {ppo.all_stats[-1]['game/episodeLength']} episodeReward {ppo.all_stats[-1]['game/episodeReward']} stale {ppo.all_stats[-1]['game/staleSteps']}"
+          + "                                                                                                                                     ", end="\n" if i % 10 == 0 else "\r")
 
 # match regex with epoch{number}
 # new model name substitute epoch{number + args.epoch}
-saveAll(args.model)
+saveAll(modelName)
 
