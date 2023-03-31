@@ -220,7 +220,7 @@ class VectorPPO:
         "vf_coef": 0.5,
         "epoch_steps": 256,
         "epochs_per_game": 1,
-        "batch_size": 2, # multiplied by num agents and num models
+        "batch_size": 1, # multiplied by num agents and num models
         # Entropy coefficient
         "ent_coef" : 0.0,
         # optimizer
