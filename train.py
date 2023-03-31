@@ -89,7 +89,7 @@ print("terminateReward", terminateReward, "livingReward", livingReward, "discoun
 player = VectorPlayer(env, num_agents=num_agents, num_models=num_models, epsilon=0.01, epsilon_decay=0.99, rewardScale=rewardScale, livingReward=0, terminateReward=terminateReward)
 ppo = VectorPPO(model, env, num_agents=num_agents, num_models=num_models, player=player, gamma=0.99, weight_decay=0.0, warmup_steps=10, train_steps=1000, sync_epochs=1)
 
-if os.isdir(modelPath + args.model):
+if os.path.isdir(modelPath + args.model):
     print("loading existing state")
     loadAll(args.model)
     
