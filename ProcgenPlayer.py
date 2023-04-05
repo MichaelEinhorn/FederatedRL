@@ -21,6 +21,7 @@ class Player:
         "terminateReward": 0.0, # adds to end of all episodes sucsessful or not
         # misc
         "finishedOnly": True, # keeps running until every game started before endStep is finished
+        "maxStaleSteps": 1000, # max steps to keep in buffer after endStep, at 64 steps and lam = 0.95 this is 0.035 of the gae at 65th step.
     }
     def __init__(self, env, num_agents=1, transitionBuffer=None, **params):
         self.params = self.default_params
@@ -107,7 +108,8 @@ class Player:
             end_step -= len(self.transitions)
             self.staleSteps = len(self.transitions)
 
-        while (not self.params["finishedOnly"] and self.timeStep < end_step) or (self.params["finishedOnly"] and min(self.startSteps) < end_step):
+        while (not self.params["finishedOnly"] and self.timeStep < end_step) or \
+                (self.params["finishedOnly"] and min(self.startSteps) < end_step and self.timeStep < end_step + self.params["maxStaleSteps"]):
             t = time.time()
             rew, obs, first = self.env.observe()
             
@@ -119,18 +121,18 @@ class Player:
             obs = torch.tensor(obs['rgb']).permute(0, 3, 1, 2).float().to(device)
             obs /= 255.0 # turn 0-255 to 0-1
 
-            if self.num_agents == 1:
-                rew = rew.unsqueeze(0)
-                obs = obs.unsqueeze(0)
-                first = first.unsqueeze(0)
+            # if self.num_agents == 1:
+            #     rew = rew.unsqueeze(0)
+            #     obs = obs.unsqueeze(0)
+            #     first = first.unsqueeze(0)
 
             self.timing["time/game/observe"] += time.time() - t
 
             t = time.time()
             logits, values = model(obs)
+            actions = torch.multinomial(F.softmax(logits, dim=-1), num_samples=1, generator=self.rng).squeeze(-1)
             values = values.squeeze(-1)
-
-            actions = torch.multinomial(F.softmax(logits, dim=-1), num_samples=1, generator=self.rng).squeeze()
+            
             # epsilon greedy
             if self.params["epsilon"] != 0.0:
                 rand = torch.rand(self.num_agents, generator=self.rng ,device=device) < self.params["epsilon"]
@@ -144,7 +146,7 @@ class Player:
             
             t = time.time()
             if self.num_agents == 1:
-                self.env.act(actions.squeeze().numpy())
+                self.env.act(actions.numpy())
             else:
                 self.env.act(actions.numpy())
             self.timing["time/game/act"] += time.time() - t
@@ -425,7 +427,7 @@ class VectorPlayer:
 
             # doesn't look like multinomial can do m x n x a, so (mxn) x a
             logitsFlat = torch.reshape(logits, (self.num_models * self.num_agents,) + logits.shape[2:])
-            actionsFlat = torch.multinomial(F.softmax(logitsFlat, dim=-1), num_samples=1, generator=self.rng).squeeze()
+            actionsFlat = torch.multinomial(F.softmax(logitsFlat, dim=-1), num_samples=1, generator=self.rng).squeeze(-1)
             actions = torch.reshape(actionsFlat, (self.num_models, self.num_agents) + actionsFlat.shape[1:])
 
             # epsilon greedy
@@ -441,7 +443,7 @@ class VectorPlayer:
             
             t = time.time()
             if self.num_agents * self.num_models == 1:
-                self.env.act(actions.squeeze().numpy())
+                self.env.act(actions.numpy())
             else:
                 actionsFlat = torch.reshape(actions, (self.num_models * self.num_agents,) + actions.shape[2:])
                 self.env.act(actionsFlat.numpy())
