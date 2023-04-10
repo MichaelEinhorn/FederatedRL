@@ -76,7 +76,7 @@ class PPO:
         self.transitionBuffer.clear()
         
         t = time.time()
-        self.player.runGame(self.model, steps=self.params["epoch_steps"])
+        self.player.runGame(self.model, steps=self.params["epoch_steps"], currentSteps=self.steps, currentEpoch=self.epoch, gamma=self.params["gamma"])
         self.timing["time/runGame"] = time.time() - t
         
         t = time.time()
@@ -118,6 +118,9 @@ class PPO:
                 logprob = core.logprobs_from_logits(logits, action)
                 self.timing[f"time/{self.alg_name}/forward"] += time.time() - t
 
+                # print(vpred.shape, returns.shape, old_values.shape, "line 121 ppo")
+                # print(advantages.shape, logprob.shape, old_logprobs.shape, "line 122 ppo")
+
                 vpredclipped = core.clip_by_value(vpred, 
                                                   old_values - self.params["cliprange_value"], 
                                                   old_values + self.params["cliprange_value"])
@@ -127,6 +130,8 @@ class PPO:
                 vf_loss = .5 * torch.mean(torch.max(vf_losses1, vf_losses2))
                 vf_clipfrac = torch.mean(torch.gt(vf_losses2, vf_losses1).double())
 
+                # print(vf_loss.shape, vf_losses1.shape, vf_losses2.shape, "line 133 ppo")
+
                 ratio = torch.exp(logprob - old_logprobs)
                 pg_losses = -advantages * ratio
                 pg_losses2 = -advantages * torch.clamp(ratio, 
@@ -135,6 +140,8 @@ class PPO:
                 
                 pg_loss = torch.mean(torch.max(pg_losses, pg_losses2))
                 pg_clipfrac = torch.mean(torch.gt(pg_losses2, pg_losses).double())
+
+                # print(pg_loss.shape, pg_losses.shape, pg_losses2.shape, ratio.shape, "line 142 ppo")
 
                 loss = pg_loss + self.params['vf_coef'] * vf_loss
 
@@ -294,7 +301,7 @@ class VectorPPO:
         self.transitionBuffer.clear()
         
         t = time.time()
-        self.player.runGame(self.model, steps=self.params["epoch_steps"])
+        self.player.runGame(self.model, steps=self.params["epoch_steps"], currentSteps=self.steps, currentEpoch=self.epoch, gamma=self.params["gamma"])
         self.timing["time/runGame"] = time.time() - t
         
         t = time.time()

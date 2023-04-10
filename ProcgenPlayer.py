@@ -39,6 +39,7 @@ class Player:
         self.meanEpsisodeLength = 0
         self.meanNonZeroRewards = 0
         self.meanEpisodeRewards = 0
+        self.meanDiscountRewards = 0
 
         self.advantageMean = -1
         self.advantageStd = -1
@@ -52,6 +53,9 @@ class Player:
         self.startSteps = [self.timeStep for i in range(self.num_agents)]
         self.zeroRew = [0 for i in range(self.num_agents)]
         self.sumRew = [0 for i in range(self.num_agents)]
+        self.sumDiscountRew = [0 for i in range(self.num_agents)]
+
+        self.trainEpisodesStats = []
 
         self.timing = {}
 
@@ -76,6 +80,7 @@ class Player:
         self.startSteps = [self.timeStep for i in range(self.num_agents)]
         self.zeroRew = [0 for i in range(self.num_agents)]
         self.sumRew = [0 for i in range(self.num_agents)]
+        self.sumDiscountRew = [0 for i in range(self.num_agents)]
 
     def reset(self, rEnv=None, **params):
         if rEnv is not None:
@@ -91,15 +96,18 @@ class Player:
         self.startSteps = [self.timeStep for i in range(self.num_agents)]
         self.zeroRew = [0 for i in range(self.num_agents)]
         self.sumRew = [0 for i in range(self.num_agents)]
+        self.sumDiscountRew = [0 for i in range(self.num_agents)]
 
 
     @torch.no_grad()
-    def runGame(self, model, steps=100):
+    def runGame(self, model, steps=100, currentSteps=None, currentEpoch=None, gamma=None):
         # used to calculate mean stats
         episodeCount = 0
         self.meanEpsisodeLength = 0
         self.meanNonZeroRewards = 0
         self.meanEpisodeRewards = 0
+        self.meanDiscountRewards = 0
+
         self.timing = {"time/game/observe": 0, "time/game/act": 0, "time/game/forward": 0, "time/game/stats": 0, "time/game/transition": 0}
 
         self.stepsPerGameLoop = steps
@@ -131,7 +139,12 @@ class Player:
             t = time.time()
             logits, values = model(obs)
             actions = torch.multinomial(F.softmax(logits, dim=-1), num_samples=1, generator=self.rng).squeeze(-1)
-            values = values.squeeze(-1)
+            values = values.squeeze(-1) 
+            # squeeze values causes collapse to 0 reward 1k step episodes, 
+            # without squeeze values the shapes of the advantages become agent x agent which is wrong
+            # this probably mixed values across the batch and added a bunch of erronous loss terms, 1 x agent * agent x 1
+
+            # print(logits.shape, values.shape, actions.shape, rew.shape, first.shape, obs.shape, "line 136")
             
             # epsilon greedy
             if self.params["epsilon"] != 0.0:
@@ -172,6 +185,9 @@ class Player:
                         self.meanEpsisodeLength += self.timeStep - self.startSteps[i]
                         self.meanNonZeroRewards += self.zeroRew[i]
                         self.meanEpisodeRewards += self.sumRew[i]
+                        self.meanDiscountRewards += self.sumDiscountRew[i]
+                                                            # current time       agent  sum reward      sum discounted reward  positive reward   episode length
+                        self.trainEpisodesStats.append([currentSteps, currentEpoch, i, self.sumRew[i], self.sumDiscountRew[i], self.zeroRew[i], self.timeStep - self.startSteps[i]])
 
                         self.episodes += 1
                         episodeCount += 1
@@ -179,9 +195,11 @@ class Player:
                         self.startSteps[i] = self.timeStep
                         self.zeroRew[i] = 0
                         self.sumRew[i] = 0
+                        self.sumDiscountRew[i] = 0
 
                 # every step stats
                 self.sumRew[i] += rew[i].item()
+                self.sumDiscountRew[i] += rew[i].item() * (gamma ** (self.timeStep - self.startSteps[i]))
                 if rew[i] > 0 and self.zeroRew[i] == 0:
                     self.zeroRew[i] = 1
 
@@ -200,6 +218,7 @@ class Player:
             self.meanEpsisodeLength /= episodeCount
             self.meanNonZeroRewards /= episodeCount
             self.meanEpisodeRewards /= episodeCount
+            self.meanDiscountRewards /= episodeCount
 
     @torch.no_grad()
     def computeAdvantages(self, gamma=0.99, lam=0.95, whiten=True):
@@ -216,6 +235,8 @@ class Player:
             delta = reward + gamma * nextvalues - values
             lastgaelam = delta + gamma * lam * lastgaelam
 
+            # print(lastgaelam.shape, nextvalues.shape, values.shape, delta.shape, "line 221")
+
             # dont reassign advantages to 0
             advantages_reversed.append(deepcopy(lastgaelam))
             returns_reversed.append(deepcopy(lastgaelam + values))
@@ -231,6 +252,7 @@ class Player:
         advantages_std = 1
         if whiten:
             advantageTens = torch.stack(advantages_reversed) # dim 0
+            # print(advantageTens.shape, "line 238")
             if self.params["finishedOnly"]:
                 advantageTens = advantageTens[:self.stepsPerGameLoop] # only whiten advantages which will be returned
             advantages_mean = torch.mean(advantageTens)
@@ -258,6 +280,8 @@ class Player:
                 adv = (advantages[i] - advantages_mean) / advantages_std
             else:
                 adv = advantages[i]
+
+            # print(adv.shape, returns[i].shape, "line 267")
             lineItem = (trans_dict["reward"], 
                         trans_dict["obs"],
                         trans_dict["action"],
@@ -291,6 +315,7 @@ class Player:
             "episodeLength": self.meanEpsisodeLength, # of completed episodes
             "nonZeroReward": self.meanNonZeroRewards,  # completed episodes with positive reward
             "episodeReward": self.meanEpisodeRewards, # of completed episodes
+            "discountedReward": self.meanDiscountRewards, # of completed episodes
             "advantageMean_PreWhiten": self.advantageMean, # of first stepsPerGameLoop steps
             "advantageStd_PreWhiten": self.advantageStd, # of first stepsPerGameLoop steps
             "staleSteps": self.staleSteps # extra steps from previous run game loop
@@ -310,6 +335,7 @@ class VectorPlayer:
         "terminateReward": 0.0, # adds to end of all episodes sucsessful or not
         # misc
         "finishedOnly": True, # keeps running until every game started before endStep is finished
+        "maxStaleSteps": 1000, # max steps to keep from previous game loop
     }
     def __init__(self, env, num_agents=1, num_models=1, transitionBuffer=None, **params):
         self.params = self.default_params
@@ -328,6 +354,7 @@ class VectorPlayer:
         self.meanEpsisodeLength = [0 for j in range(self.num_models)]
         self.meanNonZeroRewards = [0 for j in range(self.num_models)]
         self.meanEpisodeRewards = [0 for j in range(self.num_models)]
+        self.meanDiscountRewards = [0 for j in range(self.num_models)]
 
         self.advantageMean = -1
         self.advantageStd = -1
@@ -341,8 +368,10 @@ class VectorPlayer:
         self.startSteps = [[self.timeStep for i in range(self.num_agents)] for j in range(self.num_models)]
         self.zeroRew = [[0 for i in range(self.num_agents)] for j in range(self.num_models)]
         self.sumRew = [[0 for i in range(self.num_agents)] for j in range(self.num_models)]
+        self.sumDiscountRew = [[0 for i in range(self.num_agents)] for j in range(self.num_models)]
 
         self.timing = {}
+        self.trainEpisodeStats = []
 
     def state_dict(self):
         return {
@@ -365,6 +394,7 @@ class VectorPlayer:
         self.startSteps = [[self.timeStep for i in range(self.num_agents)] for j in range(self.num_models)]
         self.zeroRew = [[0 for i in range(self.num_agents)] for j in range(self.num_models)]
         self.sumRew = [[0 for i in range(self.num_agents)] for j in range(self.num_models)]
+        self.sumDiscountRew = [[0 for i in range(self.num_agents)] for j in range(self.num_models)]
 
     def reset(self, rEnv=None, **params):
         if rEnv is not None:
@@ -380,15 +410,17 @@ class VectorPlayer:
         self.startSteps = [[self.timeStep for i in range(self.num_agents)] for j in range(self.num_models)]
         self.zeroRew = [[0 for i in range(self.num_agents)] for j in range(self.num_models)]
         self.sumRew = [[0 for i in range(self.num_agents)] for j in range(self.num_models)]
+        self.sumDiscountRew = [[0 for i in range(self.num_agents)] for j in range(self.num_models)]
 
 
     @torch.no_grad()
-    def runGame(self, model, steps=100):
+    def runGame(self, model, steps=100, currentSteps=None, currentEpoch=None, gamma=None):
         # used to calculate mean stats
-        episodeCount = 0
+        episodeCount = [0 for j in range(self.num_models)]
         self.meanEpsisodeLength = [0 for j in range(self.num_models)]
         self.meanNonZeroRewards = [0 for j in range(self.num_models)]
         self.meanEpisodeRewards = [0 for j in range(self.num_models)]
+        self.meanDiscountRewards = [0 for j in range(self.num_models)]
         self.timing = {"time/game/observe": 0, "time/game/act": 0, "time/game/forward": 0, "time/game/stats": 0, "time/game/transition": 0}
 
         self.stepsPerGameLoop = steps
@@ -397,7 +429,8 @@ class VectorPlayer:
             end_step -= len(self.transitions)
             self.staleSteps = len(self.transitions)
 
-        while (not self.params["finishedOnly"] and self.timeStep < end_step) or (self.params["finishedOnly"] and np.amin(self.startSteps) < end_step):
+        while (not self.params["finishedOnly"] and self.timeStep < end_step) or \
+                (self.params["finishedOnly"] and np.amin(self.startSteps) < end_step and self.timeStep < end_step + self.params["maxStaleSteps"]):
             t = time.time()
             rew, obs, first = self.env.observe()
             
@@ -471,16 +504,21 @@ class VectorPlayer:
                             self.meanEpsisodeLength[j] += self.timeStep - self.startSteps[j][i]
                             self.meanNonZeroRewards[j] += self.zeroRew[j][i]
                             self.meanEpisodeRewards[j] += self.sumRew[j][i]
+                            self.meanDiscountRewards[j] += self.sumDiscountRew[j][i]
+
+                            self.trainEpisodeStats.append([currentSteps, currentEpoch, j, i, self.sumRew[j][i], self.sumDiscountRew[j][i], self.zeroRew[j][i], self.timeStep - self.startSteps[j][i]])
 
                             self.episodes += 1
-                            episodeCount += 1
+                            episodeCount[j] += 1
                             # reset
                             self.startSteps[j][i] = self.timeStep
                             self.zeroRew[j][i] = 0
                             self.sumRew[j][i] = 0
+                            self.sumDiscountRew[j][i] = 0
 
                     # every step stats
                     self.sumRew[j][i] += rew[j,i].item()
+                    self.sumDiscountRew[j][i] += rew[j,i].item() * (gamma ** (self.timeStep - self.startSteps[j][i]))
                     if rew[j][i] > 0 and self.zeroRew[j][i] == 0:
                         self.zeroRew[j][i] = 1
 
@@ -495,11 +533,13 @@ class VectorPlayer:
 
             self.timeStep += 1
 
-        if episodeCount != 0:
-            for j in range(self.num_models):
-                self.meanEpsisodeLength[j] /= episodeCount
-                self.meanNonZeroRewards[j] /= episodeCount
-                self.meanEpisodeRewards[j] /= episodeCount
+        
+        for j in range(self.num_models):
+            if episodeCount[j] != 0:
+                self.meanEpsisodeLength[j] /= episodeCount[j]
+                self.meanNonZeroRewards[j] /= episodeCount[j]
+                self.meanEpisodeRewards[j] /= episodeCount[j]
+                self.meanDiscountRewards[j] /= episodeCount[j]
 
     @torch.no_grad()
     def computeAdvantages(self, gamma=0.99, lam=0.95, whiten=True):
@@ -592,6 +632,7 @@ class VectorPlayer:
             "episodeLength": self.meanEpsisodeLength, # of completed episodes
             "nonZeroReward": self.meanNonZeroRewards,  # completed episodes with positive reward
             "episodeReward": self.meanEpisodeRewards, # of completed episodes
+            "discountedReward": self.meanDiscountRewards, # of completed episodes
             "advantageMean_PreWhiten": self.advantageMean, # of first stepsPerGameLoop steps
             "advantageStd_PreWhiten": self.advantageStd, # of first stepsPerGameLoop steps
             "staleSteps": self.staleSteps # extra steps from previous run game loop

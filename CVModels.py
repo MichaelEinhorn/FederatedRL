@@ -5,6 +5,7 @@ from torch import nn
 from timm.models.vision_transformer import VisionTransformer
 
 import resnet
+from procgen_model import ImpalaModel, NatureModel
 import core
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -107,10 +108,37 @@ class ViTValue(nn.Module):
         super().__init__()
         self.model = VisionTransformer(img_size=img_size, patch_size=patch_size, num_classes=num_classes, depth=depth, num_heads=num_heads, embed_dim=embed_dim, mlp_ratio=mlp_ratio)
         self.value = ValueHead(n_in=embed_dim, n_out=1, layers=valueHeadLayers)
+    
     def forward(self, x):
         x = self.model.forward_features(x)
         x = self.model.forward_head(x, True) # pre logits doesn't apply head layer yet
         l = self.model.head(x)
+        v = self.value(x)
+        return l, v
+    
+class ImpalaValue(nn.Module):
+    def __init__(self, channels=3, num_classes=15, valueHeadLayers=1):
+        super().__init__()
+        self.model = ImpalaModel(in_channels=3)
+        self.linear = nn.Linear(self.model.output_dim, num_classes)
+        self.value = ValueHead(n_in=self.model.output_dim, n_out=1, layers=valueHeadLayers)
+
+    def forward(self, x):
+        x = self.model(x)
+        l = self.linear(x)
+        v = self.value(x)
+        return l, v
+    
+class NatureValue(nn.Module):
+    def __init__(self, channels=3, num_classes=15, valueHeadLayers=1):
+        super().__init__()
+        self.model = NatureModel(in_channels=channels)
+        self.linear = nn.Linear(self.model.output_dim, num_classes)
+        self.value = ValueHead(n_in=self.model.output_dim, n_out=1, layers=valueHeadLayers)
+
+    def forward(self, x):
+        x = self.model(x)
+        l = self.linear(x)
         v = self.value(x)
         return l, v
     
