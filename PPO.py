@@ -308,7 +308,7 @@ class VectorPPO:
         self.player.fillBuffer(gamma=self.params["gamma"], lam=self.params["lam"], whiten=self.params["whiten"])
         self.timing["time/computeAdvantages"] = time.time() - t
 
-        self.steps += self.params["epoch_steps"] * self.num_agents * self.num_models
+        self.steps += self.params["epoch_steps"] * self.num_agents # * self.num_models count per model
 
     def train(self, debug=False):
         end_epoch = self.epoch + self.params["epochs_per_game"]

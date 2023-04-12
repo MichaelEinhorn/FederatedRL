@@ -55,7 +55,7 @@ class Player:
         self.sumRew = [0 for i in range(self.num_agents)]
         self.sumDiscountRew = [0 for i in range(self.num_agents)]
 
-        self.trainEpisodesStats = []
+        self.trainEpisodeStats = []
 
         self.timing = {}
 
@@ -187,7 +187,7 @@ class Player:
                         self.meanEpisodeRewards += self.sumRew[i]
                         self.meanDiscountRewards += self.sumDiscountRew[i]
                                                             # current time       agent  sum reward      sum discounted reward  positive reward   episode length
-                        self.trainEpisodesStats.append([currentSteps, currentEpoch, i, self.sumRew[i], self.sumDiscountRew[i], self.zeroRew[i], self.timeStep - self.startSteps[i]])
+                        self.trainEpisodeStats.append([currentSteps, currentEpoch, i, self.sumRew[i], self.sumDiscountRew[i], self.zeroRew[i], self.timeStep - self.startSteps[i]])
 
                         self.episodes += 1
                         episodeCount += 1
