@@ -262,11 +262,11 @@ class VectorPPO:
         self.dataloader = torch.utils.data.DataLoader(self.dataset, batch_size=self.params["batch_size"], shuffle=False, num_workers=1, collate_fn=datastructures.VectorCollator)
 
         # separate optimizer for each model. Not sure if a single optimizer for all params would actually be the same as independent training
-        self.optimzers = []
+        self.optimizers = []
         self.schedulers = []
         for i in range(self.num_models):
-            self.optimzers.append(transformers.AdamW(self.model.modelList[i].parameters(), lr=self.params["lr"], weight_decay=self.params["weight_decay"]))
-            self.schedulers.append(transformers.get_cosine_schedule_with_warmup(self.optimzers[-1], self.params["warmup_steps"], self.params["train_steps"]))
+            self.optimizers.append(transformers.AdamW(self.model.modelList[i].parameters(), lr=self.params["lr"], weight_decay=self.params["weight_decay"]))
+            self.schedulers.append(transformers.get_cosine_schedule_with_warmup(self.optimizers[-1], self.params["warmup_steps"], self.params["train_steps"]))
         # self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.params["lr"])
 
         self.all_stats = []
@@ -335,7 +335,7 @@ class VectorPPO:
                 
                 t = time.time()
                 for i in range(self.num_models):
-                    self.optimzers[i].zero_grad()
+                    self.optimizers[i].zero_grad()
                 self.timing[f"time/{self.alg_name}/optim"] += time.time() - t
 
                 t = time.time()
@@ -383,7 +383,7 @@ class VectorPPO:
                     self.timing[f"time/{self.alg_name}/backward"] += time.time() - t
                     t = time.time()
                     for i in range(self.num_models):
-                        self.optimzers[i].step()
+                        self.optimizers[i].step()
                     self.timing[f"time/{self.alg_name}/optim"] += time.time() - t
 
                 t = time.time()
