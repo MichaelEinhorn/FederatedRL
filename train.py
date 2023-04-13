@@ -57,14 +57,18 @@ def saveAll(fname):
 
 def initModel(modelName, logging=False):
     # individual model
-    if "resnet" in modelName.lower():
-        model = CVModels.CNNAgent([64, 64, 3], 15, channels=16, layers=[1,1,1,1], scale=[1,1,1,1], vheadLayers=1)
+    if "impala" in modelName.lower(): # 626k
+        model = CVModels.ImpalaValue()
+    elif "vit620k" in modelName.lower(): # deep ViT
+        model = CVModels.ViTValue(depth=12, num_heads=8, embed_dim=64, mlp_ratio=4, valueHeadLayers=1)
+    elif "vit700k" in modelName.lower(): # wide ViT
+        model = CVModels.ViTValue(depth=6, num_heads=8, embed_dim=96, mlp_ratio=4, valueHeadLayers=1)
     elif "vit60k" in modelName.lower():
         model = CVModels.ViTValue(depth=4, num_heads=4, embed_dim=32, mlp_ratio=4, valueHeadLayers=1)
     elif "vit15k" in modelName.lower():
         model = CVModels.ViTValue(depth=3, num_heads=4, embed_dim=16, mlp_ratio=4, valueHeadLayers=1)
-    elif "impala" in modelName.lower():
-        model = CVModels.ImpalaValue()
+    elif "resnet" in modelName.lower():
+        model = CVModels.CNNAgent([64, 64, 3], 15, channels=16, layers=[1,1,1,1], scale=[1,1,1,1], vheadLayers=1)
     # vectorized model
     if "vector" in modelName.lower():
         model = CVModels.VectorModelValue(model, num_models, syncFunc=syncFunc)
