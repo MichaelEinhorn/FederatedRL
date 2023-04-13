@@ -87,7 +87,8 @@ syncFreq = args.syncFreq
 gamma = 0.99
 rewardScale = 10
 terminateReward = 1 - 10.0 / rewardScale
-livingReward = -1e-3
+#livingReward = -1e-3
+livingReward = 0
 lr = 2.5e-4
 ent_coef = 1e-2
 
@@ -109,7 +110,7 @@ print(env.ac_space)
 print("init player and ppo")
 print("terminateReward", terminateReward, "livingReward", livingReward, "discountedSumLiving", livingReward / (1 - gamma)) # if terminate reward > discountedSumLiving the agent will perfer to run into obstacles.
 player = VectorPlayer(env, num_agents=num_agents, num_models=num_models, 
-                      epsilon=0.01, epsilon_decay=1, 
+                      epsilon=0.0, epsilon_decay=1, 
                       rewardScale=rewardScale, livingReward=livingReward, terminateReward=terminateReward, 
                       finishedOnly=True, maxStaleSteps=64)
 ppo = VectorPPO(model, env, num_agents=num_agents, num_models=num_models, player=player, 

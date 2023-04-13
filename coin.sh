@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -Jimpalacoinrun
+#SBATCH -JimpalacoinrunNoLv
 #SBATCH -Agts-smaguluri3
 #SBATCH -N1 --gres=gpu:V100:1                       # Number of nodes and GPUs required
 #SBATCH --mem-per-gpu=12G                           # Memory per gpu
@@ -12,4 +12,4 @@ cd $HOME/p-smaguluri3-0/RL
 
 module load anaconda3/2022.05
 conda activate torch
-python train.py --model impalaVector --epoch 1000 --num_models 1 --syncFreq 1
+python train.py --model impalaVectorNoLv --epoch 1000 --num_models 1 --syncFreq 1
