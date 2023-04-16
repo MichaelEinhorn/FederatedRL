@@ -148,7 +148,7 @@ for i in range(num_epoch // ppo.params['epochs_per_game']):
         if i % 100 == 0:
             print(ppo.all_stats[-1])
     else:
-        print(f"episodeLength {ppo.all_stats[-1]['game/episodeLength']} episodeReward {ppo.all_stats[-1]['game/episodeReward']}               ", end="\r")
+        print(f"epoch {ppo.all_stats[-1]['epoch']} episodeLength {ppo.all_stats[-1]['game/episodeLength']} episodeReward {ppo.all_stats[-1]['game/episodeReward']}               ", end="\r")
         
     if i % (50 // ppo.params['epochs_per_game']) == 0:
         saveAll(f"vector{modelName}{ppo.all_stats[-1]['epoch']}RS{rewardScale}G{gamma}Lv{livingReward!=0}_4-12")
