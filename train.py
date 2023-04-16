@@ -20,8 +20,8 @@ parser.add_argument("--num_agents", type=int, default=64, help="num epochs")
 parser.add_argument("--syncFunc", type=str, default="avg", help="sync function")
 parser.add_argument("--syncFreq", type=int, default=1, help="sync frequency in epochs")
 
-parser.add_argument("living_reward", type=float, default=-1e-3, help="living reward")
-parser.add_argument("game_name", type=str, default="coinrun", help="game name")
+parser.add_argument("--living_reward", type=float, default=-1e-3, help="living reward")
+parser.add_argument("--game_name", type=str, default="coinrun", help="game name")
 
 args = parser.parse_args()
 
