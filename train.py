@@ -20,11 +20,15 @@ parser.add_argument("--num_agents", type=int, default=64, help="num epochs")
 parser.add_argument("--syncFunc", type=str, default="avg", help="sync function")
 parser.add_argument("--syncFreq", type=int, default=1, help="sync frequency in epochs")
 
-parser.add_argument("--living_reward", type=float, default=-1e-3, help="living reward")
+parser.add_argument("--living_reward", type=float, default=0, help="living reward")
 parser.add_argument("--game_name", type=str, default="coinrun", help="game name")
 
 args = parser.parse_args()
 
+# check for windows
+windows = False
+if os.name == 'nt':
+    windows = True
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 
@@ -34,7 +38,11 @@ ppo = None
 env= None
 envKW = {}
 
-modelPath = "models/"
+if windows:
+    modelPath = "models/"
+else:
+    modelPath = "/storage/home/hcoda1/2/meinhorn6/scratch/RL/models/"
+
 def loadAll(fname, loadEnv=True):
     global env, envKW
     model.load_state_dict(torch.load(modelPath + fname + "/model.pth"))
@@ -151,6 +159,9 @@ for i in range(num_epoch // ppo.params['epochs_per_game']):
         print(f"epoch {ppo.all_stats[-1]['epoch']} episodeLength {ppo.all_stats[-1]['game/episodeLength']} episodeReward {ppo.all_stats[-1]['game/episodeReward']}               ", end="\r")
         
     if i % (50 // ppo.params['epochs_per_game']) == 0:
-        saveAll(f"{modelName}E{ppo.all_stats[-1]['epoch']}RS{rewardScale}G{gamma}Lv{livingReward!=0}_4-12")
-saveAll(f"{modelName}E{ppo.all_stats[-1]['epoch']}RS{rewardScale}G{gamma}Lv{livingReward!=0}_4-12")
+        print(f"saving E{ppo.all_stats[-1]['epoch']}")
+        saveAll(f"{modelName}E{ppo.all_stats[-1]['epoch']}RS{rewardScale}G{gamma}Lv{livingReward!=0}_4-16")
+
+print("final save")
+saveAll(f"{modelName}E{ppo.all_stats[-1]['epoch']}RS{rewardScale}G{gamma}Lv{livingReward!=0}_4-16")
 
