@@ -20,6 +20,9 @@ parser.add_argument("--num_agents", type=int, default=64, help="num epochs")
 parser.add_argument("--syncFunc", type=str, default="avg", help="sync function")
 parser.add_argument("--syncFreq", type=int, default=1, help="sync frequency in epochs")
 
+parser.add_argument("living_reward", type=float, default=-1e-3, help="living reward")
+parser.add_argument("game_name", type=str, default="coinrun", help="game name")
+
 args = parser.parse_args()
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -83,14 +86,14 @@ num_epoch = args.epoch
 num_models = args.num_models
 num_agents = args.num_agents
 syncFreq = args.syncFreq
+livingReward = args.living_reward
 
 gamma = 0.99
 rewardScale = 10
 terminateReward = 1 - 10.0 / rewardScale
-livingReward = -1e-3
-#livingReward = 0
 lr = 2.5e-4
 ent_coef = 1e-2
+eps = 0.0
 
 if args.syncFunc == "avg":
     syncFunc = CVModels.avgSync
@@ -101,7 +104,7 @@ print("init model ", modelName)
 model = initModel(modelName, logging=True).to(device)
 model.train()
 
-envKW = core.getKW(num=num_models*num_agents, env_name="coinrun", distribution_mode="easy", paint_vel_info=True, use_backgrounds=False, restrict_themes=True, use_monochrome_assets=True)
+envKW = core.getKW(num=num_models*num_agents, env_name=args.game_name, distribution_mode="easy", paint_vel_info=True, use_backgrounds=False, restrict_themes=True, use_monochrome_assets=True)
 print("init env", envKW)
 env = ProcgenGym3Env(**envKW)
 print(env.ob_space)
@@ -110,12 +113,12 @@ print(env.ac_space)
 print("init player and ppo")
 print("terminateReward", terminateReward, "livingReward", livingReward, "discountedSumLiving", livingReward / (1 - gamma)) # if terminate reward > discountedSumLiving the agent will perfer to run into obstacles.
 player = VectorPlayer(env, num_agents=num_agents, num_models=num_models, 
-                      epsilon=0.0, epsilon_decay=1, 
+                      epsilon=eps, epsilon_decay=1, 
                       rewardScale=rewardScale, livingReward=livingReward, terminateReward=terminateReward, 
                       finishedOnly=True, maxStaleSteps=64)
 ppo = VectorPPO(model, env, num_agents=num_agents, num_models=num_models, player=player, 
                 lr=lr, gamma=gamma, ent_coef=ent_coef, weight_decay=0.0, 
-                warmup_steps=10, train_steps=1000, sync_epochs=6,
+                warmup_steps=10, train_steps=1000, sync_epochs=syncFreq,
                 batch_size=1, epochs_per_game=3)
 
 print(ppo.params)

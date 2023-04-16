@@ -411,12 +411,15 @@ class VectorPPO:
                 self.timing[f"time/{self.alg_name}/stats"] += time.time() - t
 
                 # synchronization by steps
-                if self.params["sync_steps"] != -1 and batchCount % self.params["sync_steps"] == 0:
+                batchCountAdj = batchCount * self.params["batch_size"]
+                syncStepsAdj = self.params["sync_steps"] - (self.params["sync_steps"] % self.params["batch_size"]) # reduce to multiple of batch size
+                
+                if self.params["sync_steps"] != -1 and batchCountAdj % syncStepsAdj == 0:
                     t = time.time()
                     self.model.sync()
                     self.timing["time/sync"] += time.time() - t
 
-                batchCount += 1
+                batchCount += 1 # needs to stay 1 for stats
 
             ########################################### end of batch loop ##########################################################
 
