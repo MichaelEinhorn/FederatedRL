@@ -87,8 +87,8 @@ syncFreq = args.syncFreq
 gamma = 0.99
 rewardScale = 10
 terminateReward = 1 - 10.0 / rewardScale
-#livingReward = -1e-3
-livingReward = 0
+livingReward = -1e-3
+#livingReward = 0
 lr = 2.5e-4
 ent_coef = 1e-2
 
@@ -101,7 +101,7 @@ print("init model ", modelName)
 model = initModel(modelName, logging=True).to(device)
 model.train()
 
-envKW = core.getKW(num=num_models*num_agents, env_name="coinrun", distribution_mode="easy", paint_vel_info=True, use_backgrounds=False, restrict_themes=True)
+envKW = core.getKW(num=num_models*num_agents, env_name="coinrun", distribution_mode="easy", paint_vel_info=True, use_backgrounds=False, restrict_themes=True, use_monochrome_assets=True)
 print("init env", envKW)
 env = ProcgenGym3Env(**envKW)
 print(env.ob_space)
