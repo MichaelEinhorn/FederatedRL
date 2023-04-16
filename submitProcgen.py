@@ -10,7 +10,7 @@ from contextlib import redirect_stdout
 if True:
         # submits jobs to cluster based on variations of a template sh script
 
-        fname = 'tExp.sh'
+        fname = 'tCoin.sh'
         if len(sys.argv) >= 2:
             fname = sys.argv[1]
 
@@ -19,7 +19,8 @@ if True:
             
         print(data)
 
-        prefix = "mdpvK-t#-sb#-f#-a#-e#"
+        modelName = "impalaVectorV1"
+        prefix = f"{modelName}-t#-k#-n#"
 
         if len(sys.argv) >= 3:
             replaceEx = sys.argv[2] == "-r"
