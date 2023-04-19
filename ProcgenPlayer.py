@@ -371,7 +371,7 @@ class VectorPlayer:
         self.sumDiscountRew = [[0 for i in range(self.num_agents)] for j in range(self.num_models)]
 
         self.timing = {}
-        self.trainEpisodeStats = []
+        self.trainEpisodeStats = [] # causing OOM error
 
     def state_dict(self):
         return {
@@ -506,7 +506,8 @@ class VectorPlayer:
                             self.meanEpisodeRewards[j] += self.sumRew[j][i]
                             self.meanDiscountRewards[j] += self.sumDiscountRew[j][i]
 
-                            self.trainEpisodeStats.append([currentSteps, currentEpoch, j, i, self.sumRew[j][i], self.sumDiscountRew[j][i], self.zeroRew[j][i], self.timeStep - self.startSteps[j][i]])
+                            # causing OOM error
+                            # self.trainEpisodeStats.append([currentSteps, currentEpoch, j, i, self.sumRew[j][i], self.sumDiscountRew[j][i], self.zeroRew[j][i], self.timeStep - self.startSteps[j][i]])
 
                             self.episodes += 1
                             episodeCount[j] += 1

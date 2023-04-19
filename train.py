@@ -109,7 +109,7 @@ elif args.syncFunc == "sum":
     syncFunc = CVModels.sumSync()
 
 print("init model ", modelName)
-model = initModel(modelName, logging=True).to(device)
+model = initModel(modelName, logging=False).to(device)
 model.train()
 
 envKW = core.getKW(num=num_models*num_agents, env_name=args.game_name, distribution_mode="easy", paint_vel_info=True, use_backgrounds=False, restrict_themes=True, use_monochrome_assets=True)
@@ -132,13 +132,19 @@ ppo = VectorPPO(model, env, num_agents=num_agents, num_models=num_models, player
 print(ppo.params)
 print(player.params)
 
-if args.load is not None and os.path.isdir(modelPath + args.load):
+lastFileName = None
+if args.load is not None:
+    if not os.path.isdir(modelPath + args.load):
+        raise FileNotFoundError(f"load path {modelPath + args.load} is not a directory")
     print("loading existing state")
-    loadAll(modelPath + args.load)
+    lastFileName = args.load
+    loadAll(lastFileName)
     
 model.train()
-
 for i in range(num_epoch // ppo.params['epochs_per_game']):
+    if ppo.all_stats[-1]['epoch'] > num_epoch:
+        break
+
     ppo.runGame()
     ppo.train()
     if i % 10 == 0:
@@ -160,8 +166,14 @@ for i in range(num_epoch // ppo.params['epochs_per_game']):
         
     if i % (50 // ppo.params['epochs_per_game']) == 0:
         print(f"saving E{ppo.all_stats[-1]['epoch']}")
-        saveAll(f"{modelName}E{ppo.all_stats[-1]['epoch']}RS{rewardScale}G{gamma}Lv{livingReward!=0}_4-16")
+        if lastFileName is not None: # move to backup folder
+            os.rename(modelPath + lastFileName, modelPath + "backup/" + lastFileName)
+        lastFileName = f"{modelName}-E{ppo.all_stats[-1]['epoch']}-RS{rewardScale}-G{gamma}-Lv{livingReward!=0}_4-16"
+        saveAll(lastFileName)
 
 print("final save")
-saveAll(f"{modelName}E{ppo.all_stats[-1]['epoch']}RS{rewardScale}G{gamma}Lv{livingReward!=0}_4-16")
+if lastFileName is not None: # move to backup folder
+    os.rename(modelPath + lastFileName, modelPath + "backup/" + lastFileName)
+lastFileName = f"{modelName}-E{ppo.all_stats[-1]['epoch']}-RS{rewardScale}-G{gamma}-Lv{livingReward!=0}_4-16"
+saveAll(lastFileName)
 

@@ -12,4 +12,4 @@ cd $HOME/p-smaguluri3-0/RL
 
 module load anaconda3/2022.05
 conda activate torch
-python train.py --model p# --epoch e# --num_models n# --syncFreq k# --game_name bigfish --living_reward 0
+python train.py --model p# --epoch e# --num_models n# --syncFreq k# --game_name bigfish --living_reward 0 --load lm#

@@ -24,6 +24,8 @@ if True:
 
         if len(sys.argv) >= 3:
             replaceEx = sys.argv[2] == "-r"
+        elif "lm#" in data:
+            replaceEx = True
         else:
             replaceEx = False
             
@@ -36,7 +38,8 @@ if True:
         kList = [1,10,100]
 
         # retry on failure
-        for _ in range(2):
+        # for _ in range(2):
+        if True:
             if True:
                 for trial in [0, 1, 2]:
                     if True:
@@ -47,7 +50,7 @@ if True:
 
                                 if True:
                                     
-                                    epoch = 4000 / K
+                                    epoch = 4000 // N
                                         
                                     tprefix = prefix.replace("t#", "t" + str(trial))
                                     tprefix = tprefix.replace("k#", "k" + str(K))
@@ -75,6 +78,13 @@ if True:
                                     tdata = tdata.replace("k#", str(K))
                                     tdata = tdata.replace("n#", str(N))
                                     tdata = tdata.replace("e#", str(epoch))
+
+                                    if "lm#" in tdata:
+                                        files = os.listdir(dirPath)
+                                        files = [f for f in files if tprefix in f]
+                                        files = [f for f in files if "4-16" in f]
+                                        tdata = tdata.replace("lm#", files[0])
+
                                         
                                     print(tdata)
                                     textfile = open("autoCoin.sh", "w")
