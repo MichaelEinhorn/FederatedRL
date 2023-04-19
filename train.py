@@ -55,6 +55,8 @@ def loadAll(fname, loadEnv=True):
     else:
         player.reset()
     ppo.all_stats = torch.load(modelPath + fname + "/stats.pth")
+    model.stats["sync/comms"] = ppo.all_stats[-1]["sync/comms"]
+    model.stats["sync/data"] = ppo.all_stats[-1]["sync/data"]
 
 def saveAll(fname):
     os.makedirs(modelPath + fname, exist_ok=True)
