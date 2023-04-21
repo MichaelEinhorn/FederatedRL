@@ -41,7 +41,7 @@ if True:
         # for _ in range(2):
         if True:
             if True:
-                for trial in [0, 1, 2]:
+                for trial in [2]:
                     if True:
                         for N in nList:
                             for K in kList:
@@ -50,7 +50,7 @@ if True:
 
                                 if True:
                                     
-                                    epoch = 4000 // N
+                                    epoch = 4000
                                         
                                     tprefix = prefix.replace("t#", "t" + str(trial))
                                     tprefix = tprefix.replace("k#", "k" + str(K))

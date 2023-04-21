@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH -Jp#
 #SBATCH -Agts-smaguluri3
-#SBATCH -N1 --gres=gpu:V100:1                       # Number of nodes and GPUs required
+#SBATCH -N1 --gres=gpu:RTX_6000:1                       # Number of nodes and GPUs required
 #SBATCH --mem-per-gpu=16G                           # Memory per gpu
-#SBATCH -t1-00:00:00             		
+#SBATCH -t0-03:00:00             		
 #SBATCH -qinferno
 #SBATCH -o/storage/home/hcoda1/2/meinhorn6/scratch/logs/p#-%j.out
 #SBATCH --mail-user=meinhorn6@gatech.edu

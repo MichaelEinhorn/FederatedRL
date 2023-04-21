@@ -1,6 +1,7 @@
 import os
 import argparse
 
+import numpy as np
 import torch
 from procgen import ProcgenGym3Env
 from torchinfo import summary
@@ -31,6 +32,9 @@ if os.name == 'nt':
     windows = True
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
+
+if device == "cpu":
+    raise Exception("no CUDA")
 
 model = None
 player = None
@@ -144,7 +148,12 @@ if args.load is not None:
     
 model.train()
 for i in range(num_epoch // ppo.params['epochs_per_game']):
-    if ppo.all_stats[-1]['epoch'] > num_epoch:
+    if len(ppo.all_stats) > 0 and ppo.all_stats[-1]['epoch'] > num_epoch:
+        break
+
+    rewThresh = 0.7
+    LastE = 50
+    if len(ppo.all_stats) > LastE and np.mean([s["game/episodeReward"] for s in ppo.all_stats][-LastE:]) > rewThresh:
         break
 
     ppo.runGame()
@@ -169,13 +178,15 @@ for i in range(num_epoch // ppo.params['epochs_per_game']):
     if i % (50 // ppo.params['epochs_per_game']) == 0:
         print(f"saving E{ppo.all_stats[-1]['epoch']}")
         if lastFileName is not None: # move to backup folder
-            os.rename(modelPath + lastFileName, modelPath + "backup/" + lastFileName)
+            if not os.path.isdir(modelPath + "backup/" + lastFileName):
+                os.rename(modelPath + lastFileName, modelPath + "backup/" + lastFileName)
         lastFileName = f"{modelName}-E{ppo.all_stats[-1]['epoch']}-RS{rewardScale}-G{gamma}-Lv{livingReward!=0}_4-16"
         saveAll(lastFileName)
 
 print("final save")
 if lastFileName is not None: # move to backup folder
-    os.rename(modelPath + lastFileName, modelPath + "backup/" + lastFileName)
+    if not os.path.isdir(modelPath + "backup/" + lastFileName):
+        os.rename(modelPath + lastFileName, modelPath + "backup/" + lastFileName)
 lastFileName = f"{modelName}-E{ppo.all_stats[-1]['epoch']}-RS{rewardScale}-G{gamma}-Lv{livingReward!=0}_4-16"
 saveAll(lastFileName)
 
